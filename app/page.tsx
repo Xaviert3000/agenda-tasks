@@ -1,11 +1,17 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/agenda-me/projects/ecommerce-website/kanban");
-  }, [router]);
-  return null;
+export default async function Home() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("slug")
+    .limit(1)
+    .single();
+
+  redirect(ws ? `/${ws.slug}/dashboard` : "/onboarding");
 }

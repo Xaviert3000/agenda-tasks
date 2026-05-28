@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, ArrowRight, Check, Users, Zap, Shield } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Check, Users, Zap, Shield, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const PLANS = [
   {
@@ -80,6 +81,7 @@ export default function RegisterPage() {
   const [agreed,      setAgreed]      = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [errors,      setErrors]      = useState<Record<string, string>>({});
+  const [emailSent,   setEmailSent]   = useState(false);
 
   const validate1 = () => {
     const e: Record<string, string> = {};
@@ -110,8 +112,48 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!validate2()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    router.replace("/agenda-me/projects/ecommerce-website/kanban");
+
+    const supabase = createClient();
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+
+    if (signUpError) {
+      setErrors({ submit: signUpError.message });
+      setLoading(false);
+      return;
+    }
+
+    const userId = data.user?.id;
+    if (!userId) { setLoading(false); return; }
+
+    const slug = workspace
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
+
+    let finalSlug = slug;
+    const { error: wsError } = await supabase
+      .from("workspaces")
+      .insert({ name: workspace, slug, created_by: userId });
+
+    if (wsError) {
+      finalSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
+      await supabase
+        .from("workspaces")
+        .insert({ name: workspace, slug: finalSlug, created_by: userId });
+    }
+
+    if (data.session) {
+      router.replace(`/${finalSlug}/dashboard`);
+    } else {
+      setEmailSent(true);
+      setLoading(false);
+    }
   };
 
   const Field = ({
@@ -145,6 +187,35 @@ export default function RegisterPage() {
       {error && <p className="mt-1 text-xs text-red-500 font-medium">{error}</p>}
     </div>
   );
+
+  if (emailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <div className="w-full max-w-[400px] text-center">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg"
+            style={{ background: "linear-gradient(135deg, #2F3988 0%, #4a51a8 100%)" }}
+          >
+            <Mail className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Verifica tu correo</h2>
+          <p className="text-sm text-gray-500 leading-relaxed mb-6">
+            Te enviamos un enlace de confirmación a{" "}
+            <span className="font-semibold text-gray-700">{email}</span>.<br />
+            Revisa tu bandeja y haz clic en el enlace para activar tu cuenta.
+          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #2F3988 0%, #4a51a8 100%)" }}
+          >
+            Ir al inicio de sesión
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-gray-50">

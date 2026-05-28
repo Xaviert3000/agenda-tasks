@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const FEATURES = [
   "Gestión de tareas con tableros Kanban",
@@ -34,9 +35,23 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    // Simulate auth — redirect to app after short delay
-    await new Promise((r) => setTimeout(r, 1200));
-    router.replace("/agenda-me/projects/ecommerce-website/kanban");
+
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (authError) {
+      setError("Correo o contraseña incorrectos.");
+      setLoading(false);
+      return;
+    }
+
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("slug")
+      .limit(1)
+      .single();
+
+    router.replace(ws ? `/${ws.slug}/dashboard` : "/onboarding");
   };
 
   return (
