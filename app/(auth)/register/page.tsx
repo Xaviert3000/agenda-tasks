@@ -176,21 +176,27 @@ export default function RegisterPage() {
 
     // Usamos API route con service role para bypasear RLS
     // (necesario cuando Supabase requiere confirmar email y no hay sesión activa)
-    const wsRes = await fetch("/api/workspace/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: workspace, slug, plan, userId }),
-    });
-    const wsJson = await wsRes.json();
+    try {
+      const wsRes = await fetch("/api/workspace/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: workspace, slug, plan, userId }),
+      });
+      const wsJson = await wsRes.json();
 
-    if (wsJson.error) {
-      setErrors({ submit: `Error al crear el workspace: ${wsJson.error}` });
+      if (wsJson.error) {
+        setErrors({ submit: `Error al crear el workspace: ${wsJson.error}` });
+        setLoading(false);
+        return;
+      }
+
+      workspaceId = wsJson.workspace?.id ?? null;
+      finalSlug   = wsJson.workspace?.slug ?? slug;
+    } catch (err) {
+      setErrors({ submit: `Error al crear el workspace: ${String(err)}` });
       setLoading(false);
       return;
     }
-
-    workspaceId = wsJson.workspace?.id ?? null;
-    finalSlug   = wsJson.workspace?.slug ?? slug;
 
     if (!data.session) {
       // Si eligió Pro, guardar para redirigir a Stripe después de confirmar email
