@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import {
   User,
   Building2,
@@ -108,6 +109,21 @@ export default function SettingsPage() {
 
   /* Seguridad */
   const [twoFactor, setTwoFactor] = useState(false);
+
+  /* Plan */
+  const [workspacePlan, setWorkspacePlan] = useState<"free" | "pro">("free");
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("workspaces")
+      .select("plan")
+      .eq("slug", workspace)
+      .single()
+      .then(({ data }) => {
+        if (data?.plan === "pro") setWorkspacePlan("pro");
+      });
+  }, [workspace]);
 
   const handleSave = () => {
     setSaved(true);
@@ -588,8 +604,8 @@ export default function SettingsPage() {
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1.5">Plan actual</label>
           <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">
-            <span className="text-sm font-semibold text-[#2F3988]">Plan Pro</span>
-            <span className="text-xs text-gray-400">· 10 usuarios · 100 GB</span>
+            <span className="text-sm font-semibold text-[#2F3988]">{workspacePlan === "pro" ? "Plan Pro" : "Plan Gratis"}</span>
+            <span className="text-xs text-gray-400">{workspacePlan === "pro" ? "· Usuarios ilimitados · 100 GB" : "· 5 usuarios · 100 MB"}</span>
           </div>
         </div>
       </div>
@@ -706,68 +722,117 @@ export default function SettingsPage() {
     </div>
   );
 
-  const renderFacturacion = () => (
-    <div className="space-y-8">
-      <div>
-        <h3 className="text-base font-semibold text-gray-900 mb-1">Facturación</h3>
-        <p className="text-sm text-gray-500">Gestiona tu plan y métodos de pago.</p>
-      </div>
+  const renderFacturacion = () => {
+    const isPro = workspacePlan === "pro";
 
-      {/* Current plan */}
-      <div className="bg-gradient-to-r from-[#2F3988] to-[#7177B4] rounded-xl p-5 text-white">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-xs font-medium opacity-70">Plan actual</p>
-            <p className="text-2xl font-bold">Plan Pro</p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold">$29</p>
-            <p className="text-xs opacity-70">por usuario / mes</p>
-          </div>
+    const planFeatures = isPro
+      ? ["Usuarios ilimitados", "100 GB almacenamiento", "Proyectos ilimitados", "Soporte prioritario 24/7", "Integraciones avanzadas", "Exportación de reportes"]
+      : ["Hasta 5 usuarios", "100 MB almacenamiento", "3 proyectos activos", "Soporte por email"];
+
+    const usageRows = isPro
+      ? [
+          { label: "Usuarios",       used: 4,  total: 999, unit: "ilimitados" },
+          { label: "Almacenamiento", used: 23, total: 100, unit: "GB de 100 GB" },
+          { label: "Proyectos",      used: 5,  total: 999, unit: "ilimitados" },
+        ]
+      : [
+          { label: "Usuarios",       used: 4,  total: 5,   unit: "de 5" },
+          { label: "Almacenamiento", used: 23, total: 100, unit: "MB de 100 MB" },
+          { label: "Proyectos",      used: 2,  total: 3,   unit: "de 3" },
+        ];
+
+    return (
+      <div className="space-y-8">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 mb-1">Facturación</h3>
+          <p className="text-sm text-gray-500">Gestiona tu plan y métodos de pago.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {["10 usuarios", "100 GB almacenamiento", "Proyectos ilimitados", "Soporte prioritario"].map((f) => (
-            <span key={f} className="flex items-center gap-1 text-xs bg-white/20 px-2.5 py-1 rounded-full">
-              <Check className="w-3 h-3" /> {f}
-            </span>
+
+        {/* Current plan */}
+        {isPro ? (
+          <div className="bg-gradient-to-r from-[#2F3988] to-[#7177B4] rounded-xl p-5 text-white">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium opacity-70">Plan actual</p>
+                <p className="text-2xl font-bold">Plan Pro</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold">$29</p>
+                <p className="text-xs opacity-70">/ workspace / mes</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {planFeatures.map((f) => (
+                <span key={f} className="flex items-center gap-1 text-xs bg-white/20 px-2.5 py-1 rounded-full">
+                  <Check className="w-3 h-3" /> {f}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="border-2 border-gray-200 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Plan actual</p>
+                <p className="text-2xl font-bold text-gray-800">Gratis</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-gray-800">$0</p>
+                <p className="text-xs text-gray-400">para siempre</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {planFeatures.map((f) => (
+                <span key={f} className="flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">
+                  <Check className="w-3 h-3 text-gray-400" /> {f}
+                </span>
+              ))}
+            </div>
+            <a
+              href={`/${workspace}/upgrade`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[#2F3988] hover:bg-[#3d4aa8] transition-colors"
+            >
+              Mejorar a Pro · $29/mes
+            </a>
+          </div>
+        )}
+
+        {/* Usage */}
+        <div className="border border-gray-200 rounded-xl p-5 space-y-4">
+          <p className="text-sm font-semibold text-gray-800">Uso del plan</p>
+          {usageRows.map((u) => (
+            <div key={u.label}>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-medium text-gray-700">{u.label}</p>
+                <p className="text-xs text-gray-400">{u.used} {u.unit}</p>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#2F3988] rounded-full transition-all"
+                  style={{ width: u.total >= 999 ? `${(u.used / 20) * 100}%` : `${Math.min((u.used / u.total) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
           ))}
         </div>
-      </div>
 
-      {/* Usage */}
-      <div className="border border-gray-200 rounded-xl p-5 space-y-4">
-        <p className="text-sm font-semibold text-gray-800">Uso del plan</p>
-        {[
-          { label: "Usuarios",        used: 4,  total: 10,  unit: "de 10" },
-          { label: "Almacenamiento",  used: 23, total: 100, unit: "GB de 100 GB" },
-          { label: "Proyectos",       used: 5,  total: 999, unit: "ilimitados" },
-        ].map((u) => (
-          <div key={u.label}>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-medium text-gray-700">{u.label}</p>
-              <p className="text-xs text-gray-400">{u.used} {u.unit}</p>
-            </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-[#2F3988] rounded-full transition-all" style={{ width: `${Math.min((u.used / u.total) * 100, 100)}%` }} />
+        {/* Payment method — only shown on Pro */}
+        {isPro && (
+          <div className="border border-gray-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-gray-800 mb-3">Método de pago</p>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="w-10 h-7 bg-[#1A1F71] rounded flex items-center justify-center text-white text-[10px] font-bold">VISA</div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">•••• •••• •••• 4242</p>
+                <p className="text-xs text-gray-400">Vence 12/27</p>
+              </div>
+              <button className="ml-auto text-xs text-[#2F3988] hover:underline font-medium">Cambiar</button>
             </div>
           </div>
-        ))}
+        )}
       </div>
-
-      {/* Payment method */}
-      <div className="border border-gray-200 rounded-xl p-5">
-        <p className="text-sm font-semibold text-gray-800 mb-3">Método de pago</p>
-        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="w-10 h-7 bg-[#1A1F71] rounded flex items-center justify-center text-white text-[10px] font-bold">VISA</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">•••• •••• •••• 4242</p>
-            <p className="text-xs text-gray-400">Vence 12/27</p>
-          </div>
-          <button className="ml-auto text-xs text-[#2F3988] hover:underline font-medium">Cambiar</button>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderIntegraciones = () => (
     <div className="space-y-8">

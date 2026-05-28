@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Check, Users, Zap, Shield, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { savePendingProUpgrade } from "@/components/shared/PendingProUpgrade";
 
 const PLANS: { id: "free" | "pro"; name: string; price: string; period: string; perks: string[]; highlight: boolean }[] = [
   {
@@ -192,6 +193,10 @@ export default function RegisterPage() {
     }
 
     if (!data.session) {
+      // Si eligió Pro, guardar para redirigir a Stripe después de confirmar email
+      if (plan === "pro" && workspaceId) {
+        savePendingProUpgrade(workspaceId, finalSlug);
+      }
       setEmailSent(true);
       setLoading(false);
       return;

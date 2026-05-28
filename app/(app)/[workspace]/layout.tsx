@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/shared/Sidebar";
 import { TopbarWrapper } from "@/components/shared/TopbarWrapper";
+import { PendingProUpgrade } from "@/components/shared/PendingProUpgrade";
 
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
@@ -14,6 +15,7 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="flex h-full">
+      <PendingProUpgrade currentSlug={workspace} />
       <Sidebar workspace={workspace} />
       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
         <TopbarWrapper workspace={workspace} />
