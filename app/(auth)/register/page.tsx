@@ -181,13 +181,25 @@ export default function RegisterPage() {
       .single();
 
     if (wsError) {
-      finalSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
-      const { data: fallbackWs } = await supabase
-        .from("workspaces")
-        .insert({ name: workspace, slug: finalSlug, plan, created_by: userId })
-        .select("id")
-        .single();
-      workspaceId = fallbackWs?.id ?? null;
+      // Si el error es de slug duplicado, reintentamos con uno aleatorio
+      if (wsError.code === "23505") {
+        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
+        const { data: fallbackWs, error: fallbackError } = await supabase
+          .from("workspaces")
+          .insert({ name: workspace, slug: finalSlug, plan, created_by: userId })
+          .select("id")
+          .single();
+        if (fallbackError) {
+          setErrors({ submit: `Error al crear el workspace: ${fallbackError.message}` });
+          setLoading(false);
+          return;
+        }
+        workspaceId = fallbackWs?.id ?? null;
+      } else {
+        setErrors({ submit: `Error al crear el workspace: ${wsError.message}` });
+        setLoading(false);
+        return;
+      }
     } else {
       workspaceId = wsData?.id ?? null;
     }
@@ -473,6 +485,12 @@ export default function RegisterPage() {
                   </button>
                   {errors.agreed && <p className="mt-1 text-xs text-red-500 font-medium ml-6.5">{errors.agreed}</p>}
                 </div>
+
+                {errors.submit && (
+                  <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                    {errors.submit}
+                  </div>
+                )}
 
                 <button
                   type="submit"
