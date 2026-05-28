@@ -171,23 +171,49 @@ export default function RegisterPage() {
       .replace(/[^a-z0-9-]/g, "");
 
     let finalSlug = slug;
-    const { error: wsError } = await supabase
+    let workspaceId: string | null = null;
+
+    const { data: wsData, error: wsError } = await supabase
       .from("workspaces")
-      .insert({ name: workspace, slug, plan, created_by: userId });
+      .insert({ name: workspace, slug, plan, created_by: userId })
+      .select("id")
+      .single();
 
     if (wsError) {
       finalSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
-      await supabase
+      const { data: fallbackWs } = await supabase
         .from("workspaces")
-        .insert({ name: workspace, slug: finalSlug, plan, created_by: userId });
+        .insert({ name: workspace, slug: finalSlug, plan, created_by: userId })
+        .select("id")
+        .single();
+      workspaceId = fallbackWs?.id ?? null;
+    } else {
+      workspaceId = wsData?.id ?? null;
     }
 
-    if (data.session) {
-      router.replace(`/${finalSlug}/dashboard`);
-    } else {
+    if (!data.session) {
       setEmailSent(true);
       setLoading(false);
+      return;
     }
+
+    // Si eligió Pro, redirigir a Stripe Checkout
+    if (plan === "pro" && workspaceId) {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, workspaceSlug: finalSlug }),
+      });
+      const { url, error: checkoutError } = await res.json();
+      if (checkoutError || !url) {
+        router.replace(`/${finalSlug}/dashboard`);
+        return;
+      }
+      window.location.href = url;
+      return;
+    }
+
+    router.replace(`/${finalSlug}/dashboard`);
   };
 
   if (emailSent) {

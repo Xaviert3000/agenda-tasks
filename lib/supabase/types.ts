@@ -41,6 +41,9 @@ export type Database = {
           name: string;
           slug: string;
           plan: "free" | "pro";
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          subscription_status: "active" | "inactive" | "past_due" | "cancelled";
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -50,6 +53,9 @@ export type Database = {
           name: string;
           slug: string;
           plan?: "free" | "pro";
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: "active" | "inactive" | "past_due" | "cancelled";
           created_by: string;
           created_at?: string;
           updated_at?: string;
@@ -59,6 +65,9 @@ export type Database = {
           name?: string;
           slug?: string;
           plan?: "free" | "pro";
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: "active" | "inactive" | "past_due" | "cancelled";
           updated_at?: string;
         };
         Relationships: [];
