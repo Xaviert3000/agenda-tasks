@@ -7,7 +7,7 @@ import { Eye, EyeOff, ArrowRight, Check, Users, Zap, Shield, Mail } from "lucide
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-const PLANS = [
+const PLANS: { id: "free" | "pro"; name: string; price: string; period: string; perks: string[]; highlight: boolean }[] = [
   {
     id: "free",
     name: "Gratis",
@@ -110,7 +110,7 @@ export default function RegisterPage() {
   const [confirmPw,   setConfirmPw]   = useState("");
   const [showPw,      setShowPw]      = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [plan,        setPlan]        = useState("pro");
+  const [plan,        setPlan]        = useState<"free" | "pro">("pro");
   const [workspace,   setWorkspace]   = useState("");
   const [agreed,      setAgreed]      = useState(false);
   const [loading,     setLoading]     = useState(false);
@@ -173,13 +173,13 @@ export default function RegisterPage() {
     let finalSlug = slug;
     const { error: wsError } = await supabase
       .from("workspaces")
-      .insert({ name: workspace, slug, created_by: userId });
+      .insert({ name: workspace, slug, plan, created_by: userId });
 
     if (wsError) {
       finalSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
       await supabase
         .from("workspaces")
-        .insert({ name: workspace, slug: finalSlug, created_by: userId });
+        .insert({ name: workspace, slug: finalSlug, plan, created_by: userId });
     }
 
     if (data.session) {
