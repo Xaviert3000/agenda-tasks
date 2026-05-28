@@ -413,7 +413,7 @@ export default function RegisterPage() {
                     )}
                   />
                   {errors.workspace && <p className="mt-1 text-xs text-red-500 font-medium">{errors.workspace}</p>}
-                  <p className="mt-1 text-xs text-gray-400">agenda.me/<span className="font-medium text-gray-600">{workspace ? workspace.toLowerCase().replace(/\s+/g, "-") : "mi-empresa"}</span></p>
+                  <p className="mt-1 text-xs text-gray-400">{typeof window !== "undefined" ? window.location.host : "agenda.me"}/<span className="font-medium text-gray-600">{workspace ? workspace.toLowerCase().replace(/\s+/g, "-") : "mi-empresa"}</span></p>
                 </div>
 
                 {/* Plan selector */}
