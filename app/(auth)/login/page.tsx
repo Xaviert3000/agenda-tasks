@@ -51,7 +51,7 @@ export default function LoginPage() {
       .limit(1)
       .single();
 
-    router.replace(ws ? `/${ws.slug}/dashboard` : "/onboarding");
+    router.replace(ws ? `/${ws.slug}/dashboard` : "/");
   };
 
   return (

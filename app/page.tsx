@@ -13,5 +13,17 @@ export default async function Home() {
     .limit(1)
     .single();
 
-  redirect(ws ? `/${ws.slug}/dashboard` : "/onboarding");
+  if (ws) redirect(`/${ws.slug}/dashboard`);
+
+  // No workspace found — query by created_by as fallback (bypasses workspace_members RLS)
+  const { data: ownedWs } = await supabase
+    .from("workspaces")
+    .select("slug")
+    .eq("created_by", user.id)
+    .limit(1)
+    .single();
+
+  if (ownedWs) redirect(`/${ownedWs.slug}/dashboard`);
+
+  redirect("/login");
 }
