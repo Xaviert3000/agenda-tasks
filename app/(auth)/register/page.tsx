@@ -174,35 +174,23 @@ export default function RegisterPage() {
     let finalSlug = slug;
     let workspaceId: string | null = null;
 
-    const { data: wsData, error: wsError } = await supabase
-      .from("workspaces")
-      .insert({ name: workspace, slug, plan, created_by: userId })
-      .select("id")
-      .single();
+    // Usamos API route con service role para bypasear RLS
+    // (necesario cuando Supabase requiere confirmar email y no hay sesión activa)
+    const wsRes = await fetch("/api/workspace/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: workspace, slug, plan, userId }),
+    });
+    const wsJson = await wsRes.json();
 
-    if (wsError) {
-      // Si el error es de slug duplicado, reintentamos con uno aleatorio
-      if (wsError.code === "23505") {
-        finalSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
-        const { data: fallbackWs, error: fallbackError } = await supabase
-          .from("workspaces")
-          .insert({ name: workspace, slug: finalSlug, plan, created_by: userId })
-          .select("id")
-          .single();
-        if (fallbackError) {
-          setErrors({ submit: `Error al crear el workspace: ${fallbackError.message}` });
-          setLoading(false);
-          return;
-        }
-        workspaceId = fallbackWs?.id ?? null;
-      } else {
-        setErrors({ submit: `Error al crear el workspace: ${wsError.message}` });
-        setLoading(false);
-        return;
-      }
-    } else {
-      workspaceId = wsData?.id ?? null;
+    if (wsJson.error) {
+      setErrors({ submit: `Error al crear el workspace: ${wsJson.error}` });
+      setLoading(false);
+      return;
     }
+
+    workspaceId = wsJson.workspace?.id ?? null;
+    finalSlug   = wsJson.workspace?.slug ?? slug;
 
     if (!data.session) {
       // Si eligió Pro, guardar para redirigir a Stripe después de confirmar email
