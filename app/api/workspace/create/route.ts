@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import type { Database } from "@/lib/supabase/types";
 
 async function insertWorkspace(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<Database>>,
   payload: { name: string; slug: string; plan: string; userId: string }
 ) {
   const { name, slug, plan, userId } = payload;
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Server misconfigured: missing service role key" }, { status: 500 });
     }
 
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
