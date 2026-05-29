@@ -48,11 +48,24 @@ export default function ResetPasswordPage() {
   const [ready,       setReady]       = useState(false);
 
   useEffect(() => {
-    // Supabase redirige con tokens en el hash — el cliente los procesa automáticamente
     const supabase = createClient();
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") setReady(true);
+
+    // Verificar sesión activa (cubre el caso de tokens en el hash procesados automáticamente)
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) { setReady(true); return; }
+    };
+
+    checkSession();
+
+    // También escuchar el evento PASSWORD_RECOVERY como respaldo
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
+        setReady(true);
+      }
     });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
