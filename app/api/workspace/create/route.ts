@@ -32,7 +32,8 @@ async function insertWorkspace(
 
 export async function POST(req: Request) {
   try {
-    const { name, slug, plan, userId } = await req.json();
+    const { name, slug, plan: planRaw, userId } = await req.json();
+  const plan = (planRaw === "pro" ? "pro" : "free") as "free" | "pro";
 
     if (!name || !slug || !userId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
