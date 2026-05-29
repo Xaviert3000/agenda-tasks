@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
@@ -44,29 +44,7 @@ export default function ResetPasswordPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState("");
-  const [done,        setDone]        = useState(false);
-  const [ready,       setReady]       = useState(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-
-    // Verificar sesión activa (cubre el caso de tokens en el hash procesados automáticamente)
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) { setReady(true); return; }
-    };
-
-    checkSession();
-
-    // También escuchar el evento PASSWORD_RECOVERY como respaldo
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
-        setReady(true);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const [done, setDone] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,12 +120,6 @@ export default function ResetPasswordPage() {
             <p className="text-sm text-gray-500">Elige una contraseña segura para tu cuenta.</p>
           </div>
 
-          {!ready && (
-            <div className="mb-5 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm">
-              Verificando enlace de recuperación...
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Nueva contraseña</label>
@@ -208,11 +180,11 @@ export default function ResetPasswordPage() {
 
             <button
               type="submit"
-              disabled={loading || !ready}
+              disabled={loading}
               className={cn(
                 "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all",
                 "focus:outline-none focus:ring-2 focus:ring-[#2F3988]/30 focus:ring-offset-2",
-                (loading || !ready) ? "opacity-70 cursor-not-allowed" : "hover:opacity-90 active:scale-[0.99]"
+                loading ? "opacity-70 cursor-not-allowed" : "hover:opacity-90 active:scale-[0.99]"
               )}
               style={{ background: "linear-gradient(135deg, #2F3988 0%, #4a51a8 100%)" }}
             >
