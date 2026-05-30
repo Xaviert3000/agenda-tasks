@@ -6,26 +6,6 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Check, Users, Zap, Shield, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { savePendingProUpgrade } from "@/components/shared/PendingProUpgrade";
-
-const PLANS: { id: "free" | "pro"; name: string; price: string; period: string; perks: string[]; highlight: boolean }[] = [
-  {
-    id: "free",
-    name: "Gratis",
-    price: "$0",
-    period: "para siempre",
-    perks: ["Hasta 5 usuarios", "3 proyectos activos", "100 MB almacenamiento"],
-    highlight: false,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$29",
-    period: "/ usuario / mes",
-    perks: ["Usuarios ilimitados", "Proyectos ilimitados", "100 GB almacenamiento", "Soporte prioritario"],
-    highlight: true,
-  },
-];
 
 function Field({
   label, id, value, onChange, type = "text", placeholder, error, right,
@@ -63,10 +43,10 @@ function Field({
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
-    { label: "8+ caracteres",       ok: password.length >= 8 },
-    { label: "Letra mayúscula",      ok: /[A-Z]/.test(password) },
-    { label: "Número",               ok: /\d/.test(password) },
-    { label: "Carácter especial",    ok: /[^A-Za-z0-9]/.test(password) },
+    { label: "8+ caracteres",    ok: password.length >= 8 },
+    { label: "Letra mayúscula",  ok: /[A-Z]/.test(password) },
+    { label: "Número",           ok: /\d/.test(password) },
+    { label: "Carácter especial",ok: /[^A-Za-z0-9]/.test(password) },
   ];
   const score = checks.filter((c) => c.ok).length;
   const colors = ["bg-gray-200", "bg-red-400", "bg-orange-400", "bg-yellow-400", "bg-green-500"];
@@ -78,10 +58,7 @@ function PasswordStrength({ password }: { password: string }) {
     <div className="mt-2 space-y-2">
       <div className="flex gap-1">
         {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className={cn("h-1 flex-1 rounded-full transition-all duration-300", i < score ? colors[score] : "bg-gray-100")}
-          />
+          <div key={i} className={cn("h-1 flex-1 rounded-full transition-all duration-300", i < score ? colors[score] : "bg-gray-100")} />
         ))}
       </div>
       <div className="flex items-center justify-between">
@@ -104,48 +81,32 @@ function PasswordStrength({ password }: { password: string }) {
 export default function RegisterPage() {
   const router = useRouter();
 
-  const [step,        setStep]        = useState<1 | 2>(1);
   const [name,        setName]        = useState("");
   const [email,       setEmail]       = useState("");
   const [password,    setPassword]    = useState("");
   const [confirmPw,   setConfirmPw]   = useState("");
   const [showPw,      setShowPw]      = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [plan,        setPlan]        = useState<"free" | "pro">("pro");
-  const [workspace,   setWorkspace]   = useState("");
-  const [agreed,      setAgreed]      = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [errors,      setErrors]      = useState<Record<string, string>>({});
   const [emailSent,   setEmailSent]   = useState(false);
+  const [sentTo,      setSentTo]      = useState("");
 
-  const validate1 = () => {
+  const validate = () => {
     const e: Record<string, string> = {};
-    if (!name.trim())        e.name     = "El nombre es obligatorio.";
-    if (!email.trim())       e.email    = "El correo es obligatorio.";
+    if (!name.trim())        e.name      = "El nombre es obligatorio.";
+    if (!email.trim())       e.email     = "El correo es obligatorio.";
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Correo inválido.";
-    if (!password)           e.password = "La contraseña es obligatoria.";
+    if (!password)           e.password  = "La contraseña es obligatoria.";
     else if (password.length < 8) e.password = "Mínimo 8 caracteres.";
     if (password !== confirmPw) e.confirmPw = "Las contraseñas no coinciden.";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
-  const validate2 = () => {
-    const e: Record<string, string> = {};
-    if (!workspace.trim()) e.workspace = "El nombre del workspace es obligatorio.";
-    if (!agreed)           e.agreed    = "Debes aceptar los términos.";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const goToStep2 = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (validate1()) setStep(2);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate2()) return;
+    if (!validate()) return;
     setLoading(true);
 
     const supabase = createClient();
@@ -162,69 +123,14 @@ export default function RegisterPage() {
       return;
     }
 
-    const userId = data.user?.id;
-    if (!userId) { setLoading(false); return; }
-
-    const slug = workspace
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "");
-
-    let finalSlug = slug;
-    let workspaceId: string | null = null;
-
-    // Usamos API route con service role para bypasear RLS
-    // (necesario cuando Supabase requiere confirmar email y no hay sesión activa)
-    try {
-      const wsRes = await fetch("/api/workspace/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: workspace, slug, plan, userId }),
-      });
-      const wsJson = await wsRes.json();
-
-      if (wsJson.error) {
-        setErrors({ submit: `Error al crear el workspace: ${wsJson.error}` });
-        setLoading(false);
-        return;
-      }
-
-      workspaceId = wsJson.workspace?.id ?? null;
-      finalSlug   = wsJson.workspace?.slug ?? slug;
-    } catch (err) {
-      setErrors({ submit: `Error al crear el workspace: ${String(err)}` });
-      setLoading(false);
-      return;
-    }
-
     if (!data.session) {
-      // Si eligió Pro, guardar para redirigir a Stripe después de confirmar email
-      if (plan === "pro" && workspaceId) {
-        savePendingProUpgrade(workspaceId, finalSlug);
-      }
+      setSentTo(email);
       setEmailSent(true);
       setLoading(false);
       return;
     }
 
-    // Si eligió Pro, redirigir a Stripe Checkout
-    if (plan === "pro" && workspaceId) {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId, workspaceSlug: finalSlug }),
-      });
-      const { url, error: checkoutError } = await res.json();
-      if (checkoutError || !url) {
-        router.replace(`/${finalSlug}/dashboard`);
-        return;
-      }
-      window.location.href = url;
-      return;
-    }
-
-    router.replace(`/${finalSlug}/dashboard`);
+    router.replace("/onboarding");
   };
 
   if (emailSent) {
@@ -240,7 +146,7 @@ export default function RegisterPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Verifica tu correo</h2>
           <p className="text-sm text-gray-500 leading-relaxed mb-6">
             Te enviamos un enlace de confirmación a{" "}
-            <span className="font-semibold text-gray-700">{email}</span>.<br />
+            <span className="font-semibold text-gray-700">{sentTo}</span>.<br />
             Revisa tu bandeja y haz clic en el enlace para activar tu cuenta.
           </p>
           <Link
@@ -259,7 +165,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex bg-gray-50">
 
-      {/* ── LEFT: Step panel ── */}
+      {/* LEFT: Form */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
 
         {/* Logo */}
@@ -275,245 +181,103 @@ export default function RegisterPage() {
           </span>
         </div>
 
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          {[1, 2].map((s) => (
-            <div key={s} className="flex items-center gap-2">
-              <div className={cn(
-                "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all",
-                step === s
-                  ? "bg-[#2F3988] text-white shadow-md shadow-[#2F3988]/30"
-                  : step > s
-                  ? "bg-green-500 text-white"
-                  : "bg-gray-100 text-gray-400"
-              )}>
-                {step > s ? <Check className="w-3.5 h-3.5" /> : s}
-              </div>
-              <span className={cn("text-xs font-medium", step === s ? "text-gray-800" : "text-gray-400")}>
-                {s === 1 ? "Tu cuenta" : "Tu workspace"}
-              </span>
-              {s < 2 && <div className={cn("w-8 h-px mx-1", step > s ? "bg-green-400" : "bg-gray-200")} />}
-            </div>
-          ))}
-        </div>
-
         <div className="w-full max-w-[420px]">
+          <div className="mb-7">
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">Crea tu cuenta</h2>
+            <p className="text-sm text-gray-500">Comienza gratis, sin tarjeta de crédito.</p>
+          </div>
 
-          {/* ── STEP 1: Account ── */}
-          {step === 1 && (
-            <>
-              <div className="mb-7">
-                <h2 className="text-2xl font-bold text-gray-900 mb-1">Crea tu cuenta</h2>
-                <p className="text-sm text-gray-500">Comienza gratis, sin tarjeta de crédito.</p>
-              </div>
+          {/* Social buttons */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            {[
+              { name: "Google", color: "#EA4335", icon: "G" },
+              { name: "GitHub", color: "#24292E", icon: "⬡" },
+            ].map((p) => (
+              <button
+                key={p.name}
+                className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors shadow-sm"
+              >
+                <span className="font-bold text-base" style={{ color: p.color }}>{p.icon}</span>
+                {p.name}
+              </button>
+            ))}
+          </div>
 
-              {/* Social */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                {[
-                  { name: "Google", color: "#EA4335", icon: "G" },
-                  { name: "GitHub", color: "#24292E", icon: "⬡" },
-                ].map((p) => (
-                  <button
-                    key={p.name}
-                    className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors shadow-sm"
-                  >
-                    <span className="font-bold text-base" style={{ color: p.color }}>{p.icon}</span>
-                    {p.name}
+          <div className="relative flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs text-gray-400 font-medium">o con correo</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Field
+              label="Nombre completo" id="name"
+              value={name} onChange={setName}
+              placeholder="Carlos López" error={errors.name}
+            />
+            <Field
+              label="Correo electrónico" id="email"
+              type="email" value={email} onChange={setEmail}
+              placeholder="tu@empresa.com" error={errors.email}
+            />
+            <div>
+              <Field
+                label="Contraseña" id="password"
+                type={showPw ? "text" : "password"}
+                value={password} onChange={setPassword}
+                placeholder="Mínimo 8 caracteres" error={errors.password}
+                right={
+                  <button type="button" onClick={() => setShowPw((v) => !v)} className="text-gray-400 hover:text-gray-600">
+                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
-                ))}
+                }
+              />
+              <PasswordStrength password={password} />
+            </div>
+            <Field
+              label="Confirmar contraseña" id="confirmPw"
+              type={showConfirm ? "text" : "password"}
+              value={confirmPw} onChange={setConfirmPw}
+              placeholder="Repite tu contraseña" error={errors.confirmPw}
+              right={
+                <button type="button" onClick={() => setShowConfirm((v) => !v)} className="text-gray-400 hover:text-gray-600">
+                  {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              }
+            />
+
+            {errors.submit && (
+              <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                {errors.submit}
               </div>
+            )}
 
-              <div className="relative flex items-center gap-3 mb-5">
-                <div className="flex-1 h-px bg-gray-200" />
-                <span className="text-xs text-gray-400 font-medium">o con correo</span>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-
-              <form onSubmit={goToStep2} className="space-y-4">
-                <Field
-                  label="Nombre completo" id="name"
-                  value={name} onChange={setName}
-                  placeholder="Carlos López" error={errors.name}
-                />
-                <Field
-                  label="Correo electrónico" id="email"
-                  type="email" value={email} onChange={setEmail}
-                  placeholder="tu@empresa.com" error={errors.email}
-                />
-                <div>
-                  <Field
-                    label="Contraseña" id="password"
-                    type={showPw ? "text" : "password"}
-                    value={password} onChange={setPassword}
-                    placeholder="Mínimo 8 caracteres" error={errors.password}
-                    right={
-                      <button type="button" onClick={() => setShowPw((v) => !v)} className="text-gray-400 hover:text-gray-600">
-                        {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    }
-                  />
-                  <PasswordStrength password={password} />
-                </div>
-                <Field
-                  label="Confirmar contraseña" id="confirmPw"
-                  type={showConfirm ? "text" : "password"}
-                  value={confirmPw} onChange={setConfirmPw}
-                  placeholder="Repite tu contraseña" error={errors.confirmPw}
-                  right={
-                    <button type="button" onClick={() => setShowConfirm((v) => !v)} className="text-gray-400 hover:text-gray-600">
-                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  }
-                />
-
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.99]"
-                  style={{ background: "linear-gradient(135deg, #2F3988 0%, #4a51a8 100%)" }}
-                >
+            <button
+              type="submit"
+              disabled={loading}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all",
+                "focus:outline-none focus:ring-2 focus:ring-[#2F3988]/30 focus:ring-offset-2",
+                loading ? "opacity-70 cursor-not-allowed" : "hover:opacity-90 active:scale-[0.99]"
+              )}
+              style={{ background: "linear-gradient(135deg, #2F3988 0%, #4a51a8 100%)" }}
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Creando tu cuenta...
+                </>
+              ) : (
+                <>
                   Continuar
                   <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-            </>
-          )}
-
-          {/* ── STEP 2: Workspace + Plan ── */}
-          {step === 2 && (
-            <>
-              <div className="mb-7">
-                <button
-                  onClick={() => setStep(1)}
-                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mb-4 transition-colors"
-                >
-                  ← Volver
-                </button>
-                <h2 className="text-2xl font-bold text-gray-900 mb-1">Configura tu workspace</h2>
-                <p className="text-sm text-gray-500">Un último paso para empezar.</p>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Workspace name */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Nombre del workspace</label>
-                  <input
-                    value={workspace}
-                    onChange={(e) => setWorkspace(e.target.value)}
-                    placeholder="Mi Empresa"
-                    className={cn(
-                      "w-full px-3.5 py-2.5 rounded-xl border text-sm text-gray-800 bg-white transition placeholder:text-gray-300",
-                      "focus:outline-none focus:ring-2 focus:ring-[#2F3988]/20 focus:border-[#2F3988]",
-                      errors.workspace ? "border-red-300" : "border-gray-200 hover:border-gray-300"
-                    )}
-                  />
-                  {errors.workspace && <p className="mt-1 text-xs text-red-500 font-medium">{errors.workspace}</p>}
-                  <p className="mt-1 text-xs text-gray-400">{typeof window !== "undefined" ? window.location.host : "agenda.me"}/<span className="font-medium text-gray-600">{workspace ? workspace.toLowerCase().replace(/\s+/g, "-") : "mi-empresa"}</span></p>
-                </div>
-
-                {/* Plan selector */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2.5">Elige tu plan</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {PLANS.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setPlan(p.id)}
-                        className={cn(
-                          "relative text-left p-4 rounded-xl border-2 transition-all",
-                          plan === p.id
-                            ? "border-[#2F3988] bg-[#2F3988]/4 shadow-sm"
-                            : "border-gray-200 bg-white hover:border-gray-300"
-                        )}
-                      >
-                        {p.highlight && (
-                          <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-bold text-white bg-[#2F3988] px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                            Recomendado
-                          </span>
-                        )}
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-bold text-gray-800">{p.name}</span>
-                          {plan === p.id && (
-                            <div className="w-4 h-4 rounded-full bg-[#2F3988] flex items-center justify-center">
-                              <Check className="w-2.5 h-2.5 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="mb-3">
-                          <span className="text-xl font-bold text-gray-900">{p.price}</span>
-                          <span className="text-[10px] text-gray-400 ml-1">{p.period}</span>
-                        </div>
-                        <ul className="space-y-1">
-                          {p.perks.map((perk) => (
-                            <li key={perk} className="flex items-center gap-1.5 text-[11px] text-gray-600">
-                              <Check className="w-3 h-3 text-[#2F3988] flex-shrink-0" />
-                              {perk}
-                            </li>
-                          ))}
-                        </ul>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Terms */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setAgreed((v) => !v)}
-                    className="flex items-start gap-2.5"
-                  >
-                    <div className={cn(
-                      "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors",
-                      agreed ? "border-[#2F3988] bg-[#2F3988]" : "border-gray-300 bg-white"
-                    )}>
-                      {agreed && <Check className="w-2.5 h-2.5 text-white" />}
-                    </div>
-                    <span className="text-xs text-gray-600 text-left leading-relaxed">
-                      Acepto los{" "}
-                      <span className="font-semibold underline" style={{ color: "#2F3988" }}>Términos de Servicio</span>
-                      {" "}y la{" "}
-                      <span className="font-semibold underline" style={{ color: "#2F3988" }}>Política de Privacidad</span>
-                      {" "}de agenda.ME.
-                    </span>
-                  </button>
-                  {errors.agreed && <p className="mt-1 text-xs text-red-500 font-medium ml-6.5">{errors.agreed}</p>}
-                </div>
-
-                {errors.submit && (
-                  <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
-                    {errors.submit}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className={cn(
-                    "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all",
-                    "focus:outline-none focus:ring-2 focus:ring-[#2F3988]/30 focus:ring-offset-2",
-                    loading ? "opacity-70 cursor-not-allowed" : "hover:opacity-90 active:scale-[0.99]"
-                  )}
-                  style={{ background: "linear-gradient(135deg, #2F3988 0%, #4a51a8 100%)" }}
-                >
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Creando tu cuenta...
-                    </>
-                  ) : (
-                    <>
-                      Crear cuenta
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-            </>
-          )}
+                </>
+              )}
+            </button>
+          </form>
 
           <p className="text-center text-xs text-gray-500 mt-6">
             ¿Ya tienes una cuenta?{" "}
@@ -528,12 +292,11 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      {/* ── RIGHT: Benefits panel ── */}
+      {/* RIGHT: Benefits panel */}
       <div
         className="hidden lg:flex flex-col justify-center w-[440px] flex-shrink-0 relative overflow-hidden px-12 py-16"
         style={{ background: "linear-gradient(160deg, #1e2563 0%, #2F3988 50%, #3d4aa8 100%)" }}
       >
-        {/* Decorations */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-0 right-0 w-72 h-72 rounded-full opacity-10"
             style={{ background: "radial-gradient(circle, #9ACCEC 0%, transparent 70%)" }} />
@@ -561,27 +324,12 @@ export default function RegisterPage() {
           </div>
 
           {[
-            {
-              icon: Zap,
-              title: "Configuración en 2 minutos",
-              desc: "Sin instalaciones. Accede desde cualquier navegador y empieza de inmediato.",
-            },
-            {
-              icon: Users,
-              title: "Colaboración sin fricciones",
-              desc: "Invita a tu equipo, asigna tareas y mantén a todos alineados en tiempo real.",
-            },
-            {
-              icon: Shield,
-              title: "Seguro y confiable",
-              desc: "Tus datos están cifrados y respaldados. Cumplimos con GDPR y SOC 2.",
-            },
+            { icon: Zap,    title: "Configuración en 2 minutos", desc: "Sin instalaciones. Accede desde cualquier navegador y empieza de inmediato." },
+            { icon: Users,  title: "Colaboración sin fricciones", desc: "Invita a tu equipo, asigna tareas y mantén a todos alineados en tiempo real." },
+            { icon: Shield, title: "Seguro y confiable",          desc: "Tus datos están cifrados y respaldados. Cumplimos con GDPR y SOC 2." },
           ].map(({ icon: Icon, title, desc }) => (
             <div key={title} className="flex gap-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                style={{ background: "rgba(154,204,236,0.15)" }}
-              >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(154,204,236,0.15)" }}>
                 <Icon className="w-5 h-5" style={{ color: "#9ACCEC" }} />
               </div>
               <div>
@@ -591,20 +339,12 @@ export default function RegisterPage() {
             </div>
           ))}
 
-          {/* Social proof */}
           <div className="pt-8 border-t border-white/10">
             <div className="flex -space-x-2 mb-3">
               {["michael", "sofia", "daniel", "emma", "carlos"].map((s) => (
-                <img
-                  key={s}
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${s}&backgroundColor=b6e3f4`}
-                  alt={s}
-                  className="w-8 h-8 rounded-full border-2 border-[#2F3988]"
-                />
+                <img key={s} src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${s}&backgroundColor=b6e3f4`} alt={s} className="w-8 h-8 rounded-full border-2 border-[#2F3988]" />
               ))}
-              <div className="w-8 h-8 rounded-full border-2 border-[#2F3988] bg-[#3d4aa8] flex items-center justify-center text-[10px] font-bold text-white">
-                +2k
-              </div>
+              <div className="w-8 h-8 rounded-full border-2 border-[#2F3988] bg-[#3d4aa8] flex items-center justify-center text-[10px] font-bold text-white">+2k</div>
             </div>
             <p className="text-xs text-white/50">
               <span className="text-white font-semibold">+2,000 equipos</span> ya confían en agenda.ME

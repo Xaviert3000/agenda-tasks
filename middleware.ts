@@ -36,7 +36,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/reset-password");
 
-  if (!user && !isAuthRoute) {
+  const isOnboarding = pathname.startsWith("/onboarding");
+
+  if (!user && !isAuthRoute && !isOnboarding) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
