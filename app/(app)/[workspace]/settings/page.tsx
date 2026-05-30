@@ -118,6 +118,10 @@ export default function SettingsPage() {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
+  /* Uso del plan real */
+  const [usageUsers,    setUsageUsers]    = useState(0);
+  const [usageProjects, setUsageProjects] = useState(0);
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -161,7 +165,6 @@ export default function SettingsPage() {
 
       if (!members) return;
 
-      // Get emails from auth — not directly accessible, so we use profile name + role
       const loaded: TeamMember[] = members.map((m) => {
         const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
         const roleMap: Record<string, string> = { owner: "Admin", admin: "Admin", member: "Miembro" };
@@ -174,6 +177,14 @@ export default function SettingsPage() {
         };
       });
       setTeam(loaded);
+      setUsageUsers(loaded.length);
+
+      // Real project count
+      const { count: projCount } = await supabase
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", ws.id);
+      setUsageProjects(projCount ?? 0);
     })();
   }, [workspace]);
 
@@ -797,14 +808,12 @@ export default function SettingsPage() {
 
     const usageRows = isPro
       ? [
-          { label: "Usuarios",       used: 4,  total: 999, unit: "ilimitados" },
-          { label: "Almacenamiento", used: 23, total: 100, unit: "GB de 100 GB" },
-          { label: "Proyectos",      used: 5,  total: 999, unit: "ilimitados" },
+          { label: "Usuarios",  used: usageUsers,    total: 999, unit: "ilimitados" },
+          { label: "Proyectos", used: usageProjects, total: 999, unit: "ilimitados" },
         ]
       : [
-          { label: "Usuarios",       used: 4,  total: 5,   unit: "de 5" },
-          { label: "Almacenamiento", used: 23, total: 100, unit: "MB de 100 MB" },
-          { label: "Proyectos",      used: 2,  total: 3,   unit: "de 3" },
+          { label: "Usuarios",  used: usageUsers,    total: 5, unit: `de 5` },
+          { label: "Proyectos", used: usageProjects, total: 3, unit: `de 3` },
         ];
 
     return (
@@ -870,7 +879,7 @@ export default function SettingsPage() {
             <div key={u.label}>
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs font-medium text-gray-700">{u.label}</p>
-                <p className="text-xs text-gray-400">{u.used} {u.unit}</p>
+                <p className="text-xs text-gray-400">{u.used} {u.unit === "ilimitados" ? "ilimitados" : `${u.unit}`}</p>
               </div>
               <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
