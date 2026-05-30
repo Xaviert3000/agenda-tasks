@@ -116,17 +116,41 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const supabase = createClient();
+
+    // Load workspace plan
     supabase
       .from("workspaces")
-      .select("plan")
+      .select("plan, name")
       .eq("slug", workspace)
       .single()
       .then(({ data }) => {
         if (data?.plan === "pro") setWorkspacePlan("pro");
+        if (data?.name) setWsName(data.name);
       });
+
+    // Load real user profile
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setEmail(user.email ?? "");
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("name, avatar_url")
+        .eq("id", user.id)
+        .single();
+      if (profile?.name) setName(profile.name);
+    })();
   }, [workspace]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from("profiles")
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
