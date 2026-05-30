@@ -160,13 +160,13 @@ export default function SettingsPage() {
     <button
       onClick={onChange}
       className={cn(
-        "relative w-10 h-[22px] rounded-full transition-colors flex-shrink-0",
-        checked ? "bg-[#2F3988]" : "bg-gray-200"
+        "relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none",
+        checked ? "bg-[#2F3988]" : "bg-gray-300"
       )}
     >
       <span className={cn(
-        "absolute top-[3px] w-4 h-4 bg-white rounded-full shadow-sm transition-transform",
-        checked ? "translate-x-[22px]" : "translate-x-[3px]"
+        "absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200",
+        checked ? "translate-x-5" : "translate-x-0"
       )} />
     </button>
   );
