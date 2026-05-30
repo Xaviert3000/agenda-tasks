@@ -502,9 +502,6 @@ export function Sidebar({ workspace }: SidebarProps) {
           >
             <Inbox className="w-4 h-4 text-gray-400" />
             <span>Bandeja de entrada</span>
-            <span className="ml-auto text-xs bg-brand-navy text-white rounded-full px-1.5 py-0.5 leading-none font-medium">
-              4
-            </span>
           </Link>
           <Link
             href={`/${workspace}/docs`}
