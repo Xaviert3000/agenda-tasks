@@ -24,7 +24,7 @@ function EmptyDashboard({ workspace }: { workspace: string }) {
       icon: FolderPlus,
       title: "Crea tu primer proyecto",
       description: "Organiza tu trabajo en proyectos con listas, tareas y fechas límite.",
-      href: `/${workspace}/dashboard`,
+      href: `/${workspace}/dashboard?newProject=1`,
       cta: "Nuevo proyecto",
       color: "#2F3988",
       bg: "#EEF0FB",

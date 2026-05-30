@@ -1,15 +1,16 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import {
   ChevronDown, ChevronRight, Plus, X, Check,
   PanelLeftClose, PanelLeft, Settings, Inbox,
   LayoutDashboard, Folder, FileText, BookOpen, Lock, Globe,
 } from "lucide-react";
 import { useProjectSettingsStore } from "@/lib/store/projectSettingsStore";
-import { SIDEBAR_PROJECTS, WORKSPACE_MEMBERS } from "@/lib/data/mockData";
+import { WORKSPACE_MEMBERS } from "@/lib/data/mockData";
+import { createClient } from "@/lib/supabase/client";
 import type { SidebarProject, SidebarFolder, SidebarList } from "@/types/domain";
 import { cn } from "@/lib/utils";
 
@@ -27,16 +28,77 @@ type CreatingItem =
 
 export function Sidebar({ workspace }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const activeListId = pathname.match(/\/projects\/([^/]+)/)?.[1] ?? "";
 
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
-    new Set(["website"])
-  );
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  // Unified mutable projects state (static mock + dynamically created)
-  const [projects, setProjects] = useState<SidebarProject[]>(SIDEBAR_PROJECTS);
+  // Projects loaded from Supabase
+  const [projects, setProjects] = useState<SidebarProject[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+
+  // Load real projects from Supabase
+  const loadProjects = useCallback(async () => {
+    const supabase = createClient();
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("id")
+      .eq("slug", workspace)
+      .single();
+    if (!ws) { setLoadingProjects(false); return; }
+
+    const { data: projs } = await supabase
+      .from("projects")
+      .select("id, name, icon")
+      .eq("workspace_id", ws.id)
+      .order("created_at");
+
+    if (!projs) { setLoadingProjects(false); return; }
+
+    const projectIds = projs.map((p) => p.id);
+    const { data: lists } = projectIds.length
+      ? await supabase.from("kanban_lists").select("id, name, project_id, folder_id").in("project_id", projectIds).order("position")
+      : { data: [] };
+    const { data: folders } = projectIds.length
+      ? await supabase.from("folders").select("id, name, project_id").in("project_id", projectIds).order("position")
+      : { data: [] };
+
+    const sidebarProjects: SidebarProject[] = projs.map((p) => {
+      const projectFolders: SidebarFolder[] = (folders ?? [])
+        .filter((f) => f.project_id === p.id)
+        .map((f) => ({
+          id: f.id,
+          name: f.name,
+          lists: (lists ?? [])
+            .filter((l) => l.folder_id === f.id)
+            .map((l) => ({ id: l.id, name: l.name })),
+        }));
+      return {
+        id: p.id,
+        name: p.name,
+        icon: p.icon ?? "📋",
+        lists: (lists ?? []).filter((l) => l.project_id === p.id && !l.folder_id).map((l) => ({ id: l.id, name: l.name })),
+        folders: projectFolders,
+      };
+    });
+
+    setProjects(sidebarProjects);
+    setLoadingProjects(false);
+  }, [workspace]);
+
+  useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  // Auto-open project creation when ?newProject=1
+  useEffect(() => {
+    if (searchParams.get("newProject") === "1") {
+      startCreating({ type: "project" });
+      router.replace(`/${workspace}/dashboard`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Inline creation state
   const [creating, setCreating] = useState<CreatingItem>(null);
@@ -111,56 +173,68 @@ export function Sidebar({ workspace }: SidebarProps) {
     setCreatingName("");
   };
 
-  const submitCreating = () => {
+  const submitCreating = async () => {
     if (!creatingName.trim() || !creating) return;
     const name = creatingName.trim();
+    const supabase = createClient();
 
     if (creating.type === "project") {
-      const id = `proj-${Date.now()}`;
-      setProjects((p) => [
-        ...p,
-        { id, name, icon: creatingIcon, lists: [], folders: [] },
+      const { data: wsData } = await supabase
+        .from("workspaces").select("id").eq("slug", workspace).single();
+      const { data: user } = await supabase.auth.getUser();
+      if (!wsData || !user.user) return;
+
+      const { data: newProject } = await supabase
+        .from("projects")
+        .insert({ workspace_id: wsData.id, name, icon: creatingIcon, created_by: user.user.id })
+        .select("id")
+        .single();
+      if (!newProject) return;
+
+      // Create default kanban lists
+      await supabase.from("kanban_lists").insert([
+        { project_id: newProject.id, name: "Por Hacer",   color: "#EF4444", position: 0 },
+        { project_id: newProject.id, name: "En Progreso", color: "#3B82F6", position: 1 },
+        { project_id: newProject.id, name: "En Revisión", color: "#F59E0B", position: 2 },
+        { project_id: newProject.id, name: "Completado",  color: "#22C55E", position: 3 },
       ]);
-      setExpandedProjects((p) => new Set([...p, id]));
-      // Save visibility + members
-      setProjectPublic(id, creatingIsPublic);
+
+      // Add creator as project member
+      await supabase.from("project_members").insert({
+        project_id: newProject.id, user_id: user.user.id, role: "owner",
+      });
+
+      setProjectPublic(newProject.id, creatingIsPublic);
       if (!creatingIsPublic) {
-        setProjectMembers(id, Array.from(creatingMemberIds));
+        setProjectMembers(newProject.id, Array.from(creatingMemberIds));
       }
+
+      await loadProjects();
+      setExpandedProjects((p) => new Set([...p, newProject.id]));
+
     } else if (creating.type === "folder") {
-      const folderId = `folder-${Date.now()}`;
-      setProjects((p) =>
-        p.map((proj) =>
-          proj.id !== creating.projectId
-            ? proj
-            : {
-                ...proj,
-                folders: [
-                  ...(proj.folders ?? []),
-                  { id: folderId, name, lists: [] },
-                ],
-              }
-        )
-      );
-      setExpandedFolders((p) => new Set([...p, folderId]));
+      const { data: newFolder } = await supabase
+        .from("folders")
+        .insert({ project_id: creating.projectId, name, position: 0 })
+        .select("id")
+        .single();
+      if (!newFolder) return;
+      await loadProjects();
+      setExpandedFolders((p) => new Set([...p, newFolder.id]));
+
     } else if (creating.type === "list") {
-      const listId = `list-${Date.now()}`;
-      setProjects((p) =>
-        p.map((proj) => {
-          if (proj.id !== creating.projectId) return proj;
-          if (creating.folderId) {
-            return {
-              ...proj,
-              folders: (proj.folders ?? []).map((f) =>
-                f.id !== creating.folderId
-                  ? f
-                  : { ...f, lists: [...f.lists, { id: listId, name }] }
-              ),
-            };
-          }
-          return { ...proj, lists: [...(proj.lists ?? []), { id: listId, name }] };
+      const { data: newList } = await supabase
+        .from("kanban_lists")
+        .insert({
+          project_id: creating.projectId,
+          folder_id: creating.folderId ?? null,
+          name,
+          color: "#6B7280",
+          position: 99,
         })
-      );
+        .select("id")
+        .single();
+      if (newList) await loadProjects();
     }
 
     setCreating(null);
