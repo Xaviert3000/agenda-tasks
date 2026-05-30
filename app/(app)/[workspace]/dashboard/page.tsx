@@ -42,7 +42,7 @@ function EmptyDashboard({ workspace }: { workspace: string }) {
       icon: Sparkles,
       title: "Explora las funciones",
       description: "Kanban, calendario, documentos y mensajes integrados.",
-      href: `/${workspace}/docs`,
+      href: `/${workspace}/docs/getting-started`,
       cta: "Ver guía",
       color: "#8B5CF6",
       bg: "#EDE9FE",

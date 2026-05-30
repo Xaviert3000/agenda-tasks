@@ -29,154 +29,59 @@ export interface DocFolder {
 
 const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
 
-const INITIAL_DOCS: Doc[] = [
-  {
-    id: "doc-1",
-    title: "Guía de Diseño del Proyecto",
-    icon: "🎨",
-    folderId: "folder-1",
-    createdAt: "20 may 2026",
-    updatedAt: "25 may 2026",
-    tags: ["Diseño", "Guía", "UI/UX"],
-    comments: [
-      {
-        id: "c-1", author: "Sofía Carter",
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=sophia&backgroundColor=ffd5dc",
-        text: "El sistema de colores está muy bien documentado. ¿Agregamos también los tokens de sombra?",
-        createdAt: "25 may 2026", resolved: false,
-      },
-      {
-        id: "c-2", author: "Michael Anderson",
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=michael&backgroundColor=b6e3f4",
-        text: "Aprobado ✅ Listo para compartir con el equipo.",
-        createdAt: "26 may 2026", resolved: true,
-      },
-    ],
-    content: `<h1>Guía de Diseño del Proyecto</h1>
-<p>Este documento establece los lineamientos visuales y de componentes para el proyecto <strong>E-Commerce Website</strong>.</p>
-<h2>🎨 Paleta de colores</h2>
-<p>El sistema de diseño utiliza los siguientes colores base:</p>
-<ul>
-<li><strong>Brand Navy</strong> — #2F3988 · Color principal de la marca</li>
-<li><strong>Brand Cyan</strong> — #9ACCEC · Acento y barras de progreso</li>
-<li><strong>Brand Violet</strong> — #7177B4 · Color secundario</li>
-<li><strong>Success</strong> — #22C55E · Confirmaciones y estados completados</li>
-<li><strong>Warning</strong> — #F59E0B · Alertas y vencimientos próximos</li>
-<li><strong>Danger</strong> — #EF4444 · Errores y elementos vencidos</li>
-</ul>
-<h2>✏️ Tipografía</h2>
-<p>Utilizamos <strong>Plus Jakarta Sans</strong> para títulos y <strong>Inter</strong> para texto del cuerpo. Los fragmentos de código usan <code>JetBrains Mono</code>.</p>
-<h2>📐 Espaciado y grid</h2>
-<p>Seguimos un sistema de 4px base. Los componentes usan esquinas redondeadas con <code>border-radius: 8px</code> (md) y <code>12px</code> (xl) para tarjetas.</p>
-<blockquote>💡 Siempre priorizar la consistencia sobre la creatividad individual en componentes compartidos.</blockquote>`,
-  },
-  {
-    id: "doc-2",
-    title: "Especificaciones Técnicas",
-    icon: "⚙️",
-    folderId: "folder-1",
-    createdAt: "18 may 2026",
-    updatedAt: "24 may 2026",
-    tags: ["Backend", "Stack", "Referencia"],
-    comments: [],
-    content: `<h1>Especificaciones Técnicas</h1>
-<p>Referencia técnica del stack y arquitectura del proyecto.</p>
-<h2>🚀 Stack tecnológico</h2>
-<ul>
-<li><strong>Framework:</strong> Next.js 16 (App Router)</li>
-<li><strong>Lenguaje:</strong> TypeScript 5.x</li>
-<li><strong>Estilos:</strong> Tailwind CSS v4</li>
-<li><strong>Estado:</strong> Zustand + TanStack Query</li>
-<li><strong>DnD:</strong> @dnd-kit/core + @dnd-kit/sortable</li>
-</ul>
-<h2>📁 Estructura de carpetas</h2>
-<ul>
-<li><code>app/</code> — Rutas y layouts</li>
-<li><code>components/</code> — Componentes reutilizables</li>
-<li><code>lib/</code> — Utilidades, stores y datos</li>
-<li><code>types/</code> — Definiciones de TypeScript</li>
-</ul>`,
-  },
-  {
-    id: "doc-3",
-    title: "Roadmap Q2 2026",
-    icon: "🗺️",
-    folderId: "folder-2",
-    createdAt: "1 may 2026",
-    updatedAt: "22 may 2026",
-    tags: ["Planificación", "Q2", "Roadmap"],
-    comments: [
-      {
-        id: "c-3", author: "Emma Wilson",
-        avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=emma&backgroundColor=c0aede",
-        text: "Necesitamos revisar el timeline de julio. Las pruebas de carga podrían tomar más tiempo.",
-        createdAt: "22 may 2026", resolved: false,
-      },
-    ],
-    content: `<h1>Roadmap Q2 2026</h1>
-<p>Plan de trabajo para el segundo trimestre del año.</p>
-<h2>📅 Mayo — Fundamentos</h2>
-<ul>
-<li>✅ Setup inicial del proyecto y CI/CD</li>
-<li>✅ Sistema de autenticación con Google OAuth</li>
-<li>🔄 Integración con Stripe (en progreso)</li>
-</ul>
-<h2>📅 Junio — Catálogo y checkout</h2>
-<ul>
-<li>⬜ Sistema de filtros avanzados</li>
-<li>⬜ Carrito de compras y checkout</li>
-</ul>
-<blockquote>🎯 Meta: 1,000 pedidos en el primer mes post-lanzamiento.</blockquote>`,
-  },
-  {
-    id: "doc-4",
-    title: "Sprint Review — May 23",
-    icon: "📝",
-    folderId: "folder-2",
-    createdAt: "23 may 2026",
-    updatedAt: "23 may 2026",
-    tags: ["Sprint", "Review"],
-    comments: [],
-    content: `<h1>Sprint Review — 23 de Mayo</h1>
-<p><strong>Duración:</strong> 23 – 30 Mayo 2026</p>
-<h2>✅ Completado</h2>
-<ul>
-<li>Setup de CI/CD con GitHub Actions</li>
-<li>Autenticación OAuth</li>
-<li>Diseño base de tarjetas de producto</li>
-</ul>
-<h2>🔄 En progreso</h2>
-<ul>
-<li>Integración con Stripe — Michael (80%)</li>
-<li>Filtros avanzados del catálogo — Daniel (65%)</li>
-</ul>`,
-  },
-  {
-    id: "doc-5",
-    title: "API Reference — Stripe",
-    icon: "🔌",
-    createdAt: "15 may 2026",
-    updatedAt: "21 may 2026",
-    tags: ["API", "Stripe", "Backend"],
-    comments: [],
-    content: `<h1>API Reference — Stripe Integration</h1>
-<p>Documentación de los endpoints y webhooks utilizados en la integración con Stripe.</p>
-<h2>🔐 Autenticación</h2>
-<p>Todas las llamadas requieren el header <code>Authorization: Bearer sk_live_...</code>.</p>
-<h2>📡 Webhooks configurados</h2>
-<ul>
-<li><code>payment_intent.succeeded</code> — Confirma el pedido</li>
-<li><code>payment_intent.payment_failed</code> — Notifica al usuario del fallo</li>
-<li><code>charge.refunded</code> — Procesa devolución</li>
-</ul>
-<blockquote>⚠️ Nunca exponer <code>STRIPE_SECRET_KEY</code> en el frontend.</blockquote>`,
-  },
-];
+export const GETTING_STARTED_DOC_ID = "getting-started";
 
-const INITIAL_FOLDERS: DocFolder[] = [
-  { id: "folder-1", name: "Diseño & Técnico", icon: "📂" },
-  { id: "folder-2", name: "Sprints & Planning", icon: "📂" },
-];
+const GUIDE_DOC: Doc = {
+  id: GETTING_STARTED_DOC_ID,
+  title: "Guía de inicio rápido",
+  icon: "🚀",
+  createdAt: today,
+  updatedAt: today,
+  tags: ["Guía", "Inicio"],
+  comments: [],
+  content: `<h1>🚀 Bienvenido a agenda.ME</h1>
+<p>Esta guía te ayudará a sacar el máximo provecho de tu espacio de trabajo en pocos minutos.</p>
+
+<h2>1. Crea tu primer proyecto</h2>
+<p>Los proyectos son el contenedor principal de tu trabajo. Para crear uno:</p>
+<ul>
+<li>Haz clic en el <strong>botón + junto a PROYECTOS</strong> en la barra lateral izquierda.</li>
+<li>Elige un nombre, un emoji y la visibilidad (público o privado).</li>
+<li>Se crean automáticamente 4 listas: <strong>Por Hacer, En Progreso, En Revisión y Completado</strong>.</li>
+</ul>
+
+<h2>2. Gestiona tareas con el tablero Kanban</h2>
+<p>Dentro de cada proyecto encontrarás un tablero Kanban donde puedes:</p>
+<ul>
+<li>Crear tareas haciendo clic en <strong>+ Añadir tarea</strong> en cualquier columna.</li>
+<li>Arrastrar y soltar tarjetas entre columnas para cambiar su estado.</li>
+<li>Asignar responsables, fechas límite y etiquetas a cada tarea.</li>
+</ul>
+
+<h2>3. Invita a tu equipo</h2>
+<p>Colabora con otros miembros de tu organización:</p>
+<ul>
+<li>Ve a <strong>Configuración → Miembros</strong> para invitar personas por correo.</li>
+<li>Asigna roles: <strong>Admin, Moderador o Miembro</strong>.</li>
+<li>Los miembros verán solo los proyectos públicos o aquellos a los que tengan acceso.</li>
+</ul>
+
+<h2>4. Usa los mensajes para comunicarte</h2>
+<p>La sección <strong>Mensajes</strong> permite enviar mensajes directos a cualquier miembro del equipo sin salir de la plataforma. También puedes referenciar tareas directamente en la conversación.</p>
+
+<h2>5. Documenta tu trabajo</h2>
+<p>La sección <strong>Documentos</strong> (donde estás ahora) es un editor de texto completo. Puedes:</p>
+<ul>
+<li>Crear documentos de requisitos, guías o notas de sprint.</li>
+<li>Organizarlos en carpetas.</li>
+<li>Agregar comentarios y menciones.</li>
+</ul>
+
+<blockquote>💡 <strong>Consejo:</strong> Empieza creando un proyecto, añade algunas tareas e invita a un compañero. En menos de 10 minutos tendrás tu equipo organizado.</blockquote>`,
+};
+
+const INITIAL_DOCS: Doc[] = [GUIDE_DOC];
+const INITIAL_FOLDERS: DocFolder[] = [];
 
 interface DocsState {
   docs: Doc[];
