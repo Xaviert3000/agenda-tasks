@@ -45,13 +45,13 @@ const NAV_SECTIONS = [
   },
 ];
 
-/* ── Mock team members ── */
-const TEAM = [
-  { id: "michael", name: "Michael Anderson", email: "michael@agenda.me",  role: "Admin",     avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=michael&backgroundColor=b6e3f4", online: true },
-  { id: "sophia",  name: "Sofía Carter",     email: "sofia@agenda.me",    role: "Miembro",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=sophia&backgroundColor=ffd5dc",  online: true },
-  { id: "daniel",  name: "Daniel Johnson",   email: "daniel@agenda.me",   role: "Miembro",   avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=daniel&backgroundColor=c0aede",  online: false },
-  { id: "emma",    name: "Emma Wilson",      email: "emma@agenda.me",     role: "Moderador", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=emma&backgroundColor=d1fae5",    online: true },
-];
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatar_url: string | null;
+}
 
 const ROLE_COLORS: Record<string, string> = {
   Admin:     "bg-[#2F3988]/10 text-[#2F3988]",
@@ -114,6 +114,10 @@ export default function SettingsPage() {
   /* Plan */
   const [workspacePlan, setWorkspacePlan] = useState<"free" | "pro">("free");
 
+  /* Miembros reales */
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -128,17 +132,48 @@ export default function SettingsPage() {
         if (data?.name) setWsName(data.name);
       });
 
-    // Load real user profile
+    // Load real user profile and team members
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setEmail(user.email ?? "");
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("name, avatar_url")
         .eq("id", user.id)
         .single();
       if (profile?.name) setName(profile.name);
+
+      // Load workspace id + members
+      const { data: ws } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("slug", workspace)
+        .single();
+      if (!ws) return;
+      setWorkspaceId(ws.id);
+
+      const { data: members } = await supabase
+        .from("workspace_members")
+        .select("user_id, role, profiles(id, name, avatar_url)")
+        .eq("workspace_id", ws.id);
+
+      if (!members) return;
+
+      // Get emails from auth — not directly accessible, so we use profile name + role
+      const loaded: TeamMember[] = members.map((m) => {
+        const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+        const roleMap: Record<string, string> = { owner: "Admin", admin: "Admin", member: "Miembro" };
+        return {
+          id: p?.id ?? m.user_id,
+          name: p?.name ?? "Usuario",
+          email: "",
+          role: roleMap[m.role] ?? "Miembro",
+          avatar_url: p?.avatar_url ?? null,
+        };
+      });
+      setTeam(loaded);
     })();
   }, [workspace]);
 
@@ -725,22 +760,28 @@ export default function SettingsPage() {
       {/* List */}
       <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Equipo ({TEAM.length})</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Equipo ({team.length})</p>
         </div>
-        {TEAM.map((m) => (
+        {team.length === 0 ? (
+          <div className="px-5 py-8 text-center text-sm text-gray-400">
+            Aún no hay miembros en este workspace. Invita a alguien arriba.
+          </div>
+        ) : team.map((m) => (
           <div key={m.id} className="flex items-center gap-3 px-5 py-3.5">
-            <div className="relative">
-              <img src={m.avatar} alt={m.name} className="w-8 h-8 rounded-full border border-gray-100" />
-              <span className={cn("absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white", m.online ? "bg-success" : "bg-gray-300")} />
+            <div className="flex-shrink-0">
+              {m.avatar_url ? (
+                <img src={m.avatar_url} alt={m.name} className="w-8 h-8 rounded-full border border-gray-100" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600">
+                  {m.name.charAt(0).toUpperCase()}
+                </div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-800 truncate">{m.name}</p>
-              <p className="text-xs text-gray-400 truncate">{m.email}</p>
+              {m.email && <p className="text-xs text-gray-400 truncate">{m.email}</p>}
             </div>
-            <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full", ROLE_COLORS[m.role])}>{m.role}</span>
-            <button className="text-xs text-gray-400 hover:text-danger transition-colors ml-1">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full", ROLE_COLORS[m.role] ?? "bg-gray-100 text-gray-600")}>{m.role}</span>
           </div>
         ))}
       </div>
