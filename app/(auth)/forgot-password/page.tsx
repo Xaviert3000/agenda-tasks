@@ -31,7 +31,11 @@ export default function ForgotPasswordPage() {
     setLoading(false);
 
     if (resetError) {
-      setError("No pudimos enviar el correo. Verifica que la dirección sea correcta.");
+      if (resetError.message?.toLowerCase().includes("rate limit") || resetError.status === 429) {
+        setError("Demasiados intentos. Espera unos minutos antes de solicitar otro enlace.");
+      } else {
+        setError("No pudimos enviar el correo. Verifica que la dirección sea correcta.");
+      }
       return;
     }
 
