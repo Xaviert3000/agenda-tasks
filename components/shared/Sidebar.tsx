@@ -9,7 +9,6 @@ import {
   LayoutDashboard, Folder, FileText, BookOpen, Lock, Globe,
 } from "lucide-react";
 import { useProjectSettingsStore } from "@/lib/store/projectSettingsStore";
-import { WORKSPACE_MEMBERS } from "@/lib/data/mockData";
 import { createClient } from "@/lib/supabase/client";
 import type { SidebarProject, SidebarFolder, SidebarList } from "@/types/domain";
 import { cn } from "@/lib/utils";
@@ -39,6 +38,31 @@ export function Sidebar({ workspace }: SidebarProps) {
   // Projects loaded from Supabase
   const [projects, setProjects] = useState<SidebarProject[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
+
+  // Members loaded from Supabase
+  const [members, setMembers] = useState<{ id: string; name: string; avatar_url: string | null }[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const { data: ws } = await supabase.from("workspaces").select("id").eq("slug", workspace).single();
+      if (!ws) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data } = await supabase
+        .from("workspace_members")
+        .select("user_id, profiles(id, name, avatar_url)")
+        .eq("workspace_id", ws.id);
+      const list = (data ?? [])
+        .map((m) => {
+          const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+          return p ? { id: p.id, name: p.name, avatar_url: p.avatar_url } : null;
+        })
+        .filter((m): m is { id: string; name: string; avatar_url: string | null } =>
+          m !== null && m.id !== user?.id
+        );
+      setMembers(list);
+    })();
+  }, [workspace]);
 
   // Load real projects from Supabase
   const loadProjects = useCallback(async () => {
@@ -595,41 +619,40 @@ export function Sidebar({ workspace }: SidebarProps) {
                     Miembros con acceso
                   </p>
                   <div className="space-y-1">
-                    {WORKSPACE_MEMBERS.map((m) => {
-                      const selected = creatingMemberIds.has(m.id);
+                    {members.length === 0 ? (
+                      <p className="text-xs text-gray-400 px-1 py-2">No hay otros miembros en el workspace.</p>
+                    ) : members.map((m) => {
+                      const sel = creatingMemberIds.has(m.id);
                       return (
                         <button
                           key={m.id}
                           onClick={() =>
                             setCreatingMemberIds((prev) => {
                               const next = new Set(prev);
-                              selected ? next.delete(m.id) : next.add(m.id);
+                              sel ? next.delete(m.id) : next.add(m.id);
                               return next;
                             })
                           }
                           className={cn(
                             "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-all text-left",
-                            selected
-                              ? "bg-blue-50 border-[#2F3988]/20"
-                              : "bg-white border-gray-100 hover:border-gray-200"
+                            sel ? "bg-blue-50 border-[#2F3988]/20" : "bg-white border-gray-100 hover:border-gray-200"
                           )}
                         >
-                          <div className="relative flex-shrink-0">
-                            <img src={m.avatar} alt={m.name}
-                              className="w-6 h-6 rounded-full" />
-                            <span className={cn(
-                              "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white",
-                              m.isOnline ? "bg-green-400" : "bg-gray-300"
-                            )} />
+                          <div className="flex-shrink-0">
+                            {m.avatar_url ? (
+                              <img src={m.avatar_url} alt={m.name} className="w-6 h-6 rounded-full" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                                {m.name?.charAt(0).toUpperCase()}
+                              </div>
+                            )}
                           </div>
-                          <span className="flex-1 text-xs text-gray-700 font-medium truncate">
-                            {m.name}
-                          </span>
+                          <span className="flex-1 text-xs text-gray-700 font-medium truncate">{m.name}</span>
                           <div className={cn(
                             "w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all",
-                            selected ? "bg-[#2F3988]" : "border-2 border-gray-300"
+                            sel ? "bg-[#2F3988]" : "border-2 border-gray-300"
                           )}>
-                            {selected && <Check className="w-2.5 h-2.5 text-white" />}
+                            {sel && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
                         </button>
                       );
@@ -818,36 +841,36 @@ export function Sidebar({ workspace }: SidebarProps) {
           </div>
         </div>
         <div className="px-3 space-y-0.5">
-          {WORKSPACE_MEMBERS.map((member) => {
-            const isActive = pathname.includes(`/messages/${member.id}`);
-            return (
-              <Link
-                key={member.id}
-                href={`/${workspace}/messages/${member.id}`}
-                className={cn(
-                  "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
-                  isActive
-                    ? "bg-blue-50 text-brand-navy font-medium"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                )}
-              >
-                <div className="relative flex-shrink-0">
-                  <img
-                    src={member.avatar}
-                    alt={member.name}
-                    className="w-6 h-6 rounded-full"
-                  />
-                  <span
-                    className={cn(
-                      "absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white",
-                      member.isOnline ? "bg-success" : "bg-gray-300"
+          {members.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-gray-400">Sin miembros aún</p>
+          ) : (
+            members.map((member) => {
+              const isActive = pathname.includes(`/messages/${member.id}`);
+              return (
+                <Link
+                  key={member.id}
+                  href={`/${workspace}/messages/${member.id}`}
+                  className={cn(
+                    "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+                    isActive
+                      ? "bg-blue-50 text-brand-navy font-medium"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  )}
+                >
+                  <div className="relative flex-shrink-0">
+                    {member.avatar_url ? (
+                      <img src={member.avatar_url} alt={member.name} className="w-6 h-6 rounded-full" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                        {member.name?.charAt(0).toUpperCase()}
+                      </div>
                     )}
-                  />
-                </div>
-                <span className="flex-1 truncate">{member.name}</span>
-              </Link>
-            );
-          })}
+                  </div>
+                  <span className="flex-1 truncate">{member.name}</span>
+                </Link>
+              );
+            })
+          )}
         </div>
       </div>
 

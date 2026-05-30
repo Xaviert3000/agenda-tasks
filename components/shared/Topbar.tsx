@@ -11,9 +11,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/* Unread counts — static mock values matching inbox/messages data */
-const NOTIF_UNREAD  = 3; // n1, n2, n3 are unread in inbox
-const MSGS_UNREAD   = 3; // 2 from Michael + 1 from Daniel
+const NOTIF_UNREAD  = 0;
+const MSGS_UNREAD   = 0;
 
 interface BreadcrumbItem {
   label: string;
