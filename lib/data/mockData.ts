@@ -8,6 +8,8 @@ import type {
   Assignee,
 } from "@/types/domain";
 
+export const DEMO_WORKSPACE_SLUG = "demo";
+
 const LABELS: Record<string, Label> = {
   ux: { id: "ux", name: "UX", light: "#DBEAFE", solid: "#3B82F6" },
   dev: { id: "dev", name: "Desarrollo", light: "#E0E7FF", solid: "#6366F1" },
