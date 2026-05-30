@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   User,
@@ -76,7 +76,8 @@ export default function SettingsPage() {
   const params    = useParams();
   const workspace = params.workspace as string;
 
-  const [active, setActive] = useState("perfil");
+  const searchParams = useSearchParams();
+  const [active, setActive] = useState(() => searchParams.get("tab") ?? "perfil");
 
   /* Perfil */
   const [name,  setName]  = useState("Tú");

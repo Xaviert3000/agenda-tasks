@@ -33,7 +33,7 @@ function EmptyDashboard({ workspace }: { workspace: string }) {
       icon: Users,
       title: "Invita a tu equipo",
       description: "Colabora en tiempo real con los miembros de tu equipo.",
-      href: `/${workspace}/settings`,
+      href: `/${workspace}/settings?tab=miembros`,
       cta: "Invitar miembros",
       color: "#22C55E",
       bg: "#DCFCE7",
