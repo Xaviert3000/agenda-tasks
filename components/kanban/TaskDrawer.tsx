@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import type { Task, Priority, Assignee } from "@/types/domain";
 import { cn, PRIORITY_CONFIG } from "@/lib/utils";
-import { updateTaskField, setTaskAssignees } from "@/app/actions/tasks";
+import { updateTaskField, setTaskAssignees, addTaskLabel, removeTaskLabel, createSubtask, toggleSubtask, deleteSubtask } from "@/app/actions/tasks";
+import { createClient } from "@/lib/supabase/client";
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -96,17 +97,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   type SubtaskAssignee = { id: string; name: string; avatar: string };
   type Subtask = { id: string; title: string; done: boolean; assignee?: SubtaskAssignee | null };
 
-  const MOCK_SUBTASKS: Subtask[] = [
-    { id: "s1", title: "Diseñar estado vacío del carrito", done: true, assignee: { id: "m2", name: "Sofía Carter", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=sofia&backgroundColor=b6e3f4" } },
-    { id: "s2", title: "Wireframe del resumen de orden", done: false, assignee: null },
-    { id: "s3", title: "Prototipo de flujo de pago", done: false, assignee: { id: "m1", name: "Michael Anderson", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=michael&backgroundColor=ffd5dc" } },
-    { id: "s4", title: "Validaciones de formulario", done: false, assignee: null },
-    { id: "s5", title: "Revisión con el equipo", done: false, assignee: null },
-  ];
-
-  const [subtasks, setSubtasks] = useState<Subtask[]>(
-    (task?.subtasks?.total ?? 0) > 0 ? MOCK_SUBTASKS : []
-  );
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [comments, setComments] = useState(
     (task?.commentCount ?? 0) > 0 ? MOCK_COMMENTS : []
   );
@@ -116,15 +107,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
 
   /* attachments */
   type AttachFile = { id: string; name: string; size: string; type: string; url: string | null };
-  const MOCK_FILES: AttachFile[] = [
-    { id: "f1", name: "wireframes-checkout.fig", size: "2.4 MB", type: "figma", url: null },
-    { id: "f2", name: "prototipo-v2.png", size: "856 KB", type: "image/png", url: "https://images.unsplash.com/photo-1555421689-491a97ff2040?w=400&q=80" },
-    { id: "f3", name: "brief-UX.pdf", size: "1.1 MB", type: "pdf", url: null },
-  ];
-  const initialFiles = task?.attachmentCount
-    ? MOCK_FILES.slice(0, task.attachmentCount)
-    : [];
-  const [files, setFiles] = useState<AttachFile[]>(initialFiles);
+  const [files, setFiles] = useState<AttachFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -147,9 +130,19 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   const createLabel = () => {
     if (!newLabelName.trim()) return;
     const color = LABEL_COLORS[allLabels.length % LABEL_COLORS.length];
-    const newLabel = { id: `custom-${Date.now()}`, name: newLabelName.trim(), ...color };
-    setAllLabels((p) => [...p, newLabel]);
-    setLabels((p) => [...p, newLabel]);
+    const tempLabel = { id: `custom-${Date.now()}`, name: newLabelName.trim(), ...color };
+    setAllLabels((p) => [...p, tempLabel]);
+    // Optimistic add; server action will replace ID with real UUID
+    setLabels((p) => {
+      const next = [...p, tempLabel];
+      addTaskLabel(task?.id ?? "", { name: tempLabel.name, light: tempLabel.light, solid: tempLabel.solid })
+        .then((res) => {
+          if (!res) return;
+          setLabels((cur) => cur.map((l) => l.id === tempLabel.id ? { ...l, id: res.labelId } : l));
+          setAllLabels((cur) => cur.map((l) => l.id === tempLabel.id ? { ...l, id: res.labelId } : l));
+        });
+      return next;
+    });
     setNewLabelName("");
     setCreatingLabel(false);
   };
@@ -183,14 +176,53 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
     setTaskPriority(task?.priority ?? "med");
     setEstimation("");
     setOpenPop(null);
-    setFiles(task?.attachmentCount ? MOCK_FILES.slice(0, task.attachmentCount) : []);
-    setSubtasks((task?.subtasks?.total ?? 0) > 0 ? MOCK_SUBTASKS : []);
+    setFiles([]);
+    setSubtasks([]);
+    setLabels([]);
     setComments((task?.commentCount ?? 0) > 0 ? MOCK_COMMENTS : []);
     setNewSubtask("");
     setAddingSubtask(false);
     setSubtaskPop(null);
     setCreatingLabel(false);
     setNewLabelName("");
+  }, [task?.id]);
+
+  /* Load subtasks + labels from Supabase when task opens */
+  useEffect(() => {
+    if (!task?.id || task.id.startsWith("temp-")) return;
+    const supabase = createClient();
+    (async () => {
+      const [{ data: subs }, { data: taskLbls }] = await Promise.all([
+        supabase
+          .from("subtasks")
+          .select("id, title, is_completed")
+          .eq("task_id", task.id)
+          .order("position"),
+        supabase
+          .from("task_labels")
+          .select("label_id, labels(id, name, light_color, solid_color)")
+          .eq("task_id", task.id),
+      ]);
+
+      if (subs) {
+        setSubtasks(subs.map((s) => ({ id: s.id, title: s.title, done: s.is_completed, assignee: null })));
+      }
+      if (taskLbls) {
+        const mapped = taskLbls
+          .map((tl) => {
+            const l = Array.isArray(tl.labels) ? tl.labels[0] : tl.labels;
+            return l ? { id: tl.label_id, name: l.name, light: l.light_color, solid: l.solid_color } : null;
+          })
+          .filter((l): l is { id: string; name: string; light: string; solid: string } => l !== null);
+        setLabels(mapped);
+        // Merge into allLabels so they appear in the picker
+        setAllLabels((prev) => {
+          const ids = new Set(prev.map((l) => l.id));
+          const newOnes = mapped.filter((l) => !ids.has(l.id));
+          return [...prev, ...newOnes];
+        });
+      }
+    })();
   }, [task?.id]);
 
   /* Escape key */
@@ -239,18 +271,32 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   };
 
   const toggleLabel = (label: typeof ALL_LABELS[0]) => {
-    setLabels((prev) =>
-      prev.find((l) => l.id === label.id)
-        ? prev.filter((l) => l.id !== label.id)
-        : [...prev, label]
-    );
+    const isActive = labels.some((l) => l.id === label.id);
+    if (isActive) {
+      setLabels((prev) => prev.filter((l) => l.id !== label.id));
+      removeTaskLabel(taskId, label.id);
+    } else {
+      // Optimistic add with temp/local id; server action returns real UUID
+      setLabels((prev) => [...prev, label]);
+      addTaskLabel(taskId, { name: label.name, light: label.light, solid: label.solid }).then((res) => {
+        if (!res) return;
+        setLabels((cur) => cur.map((l) => l.id === label.id ? { ...l, id: res.labelId } : l));
+        setAllLabels((cur) => cur.map((l) => l.id === label.id ? { ...l, id: res.labelId } : l));
+      });
+    }
   };
 
   const submitSubtask = () => {
     if (!newSubtask.trim()) return;
-    setSubtasks((prev) => [...prev, { id: `s${Date.now()}`, title: newSubtask.trim(), done: false, assignee: null }]);
+    const tempId = `temp-s${Date.now()}`;
+    setSubtasks((prev) => [...prev, { id: tempId, title: newSubtask.trim(), done: false, assignee: null }]);
     setNewSubtask("");
     setAddingSubtask(false);
+    // Persist and replace temp ID
+    createSubtask(taskId, newSubtask.trim()).then((res) => {
+      if (!res) return;
+      setSubtasks((prev) => prev.map((s) => s.id === tempId ? { ...s, id: res.id } : s));
+    });
   };
 
   const submitComment = () => {
@@ -427,7 +473,11 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
               <div className="space-y-0.5">
                 {subtasks.map((sub) => (
                   <div key={sub.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 group">
-                    <button onClick={() => setSubtasks((p) => p.map((s) => s.id === sub.id ? { ...s, done: !s.done } : s))}>
+                    <button onClick={() => {
+                      const newDone = !sub.done;
+                      setSubtasks((p) => p.map((s) => s.id === sub.id ? { ...s, done: newDone } : s));
+                      toggleSubtask(sub.id, newDone);
+                    }}>
                       {sub.done
                         ? <CheckSquare className="w-4 h-4 flex-shrink-0" style={{ color: "#22C55E" }} />
                         : <Square className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-400" />}
@@ -504,7 +554,10 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                     </Popover>
 
                     <button
-                      onClick={() => setSubtasks((p) => p.filter((s) => s.id !== sub.id))}
+                      onClick={() => {
+                        setSubtasks((p) => p.filter((s) => s.id !== sub.id));
+                        deleteSubtask(sub.id);
+                      }}
                       className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 transition-all"
                     >
                       <Trash2 className="w-3 h-3" />
