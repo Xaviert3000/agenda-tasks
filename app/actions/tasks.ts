@@ -53,7 +53,8 @@ export async function updateTaskField(
 ): Promise<void> {
   if (!taskId || taskId.startsWith("temp-")) return;
   const supabase = await createClient();
-  await supabase.from("tasks").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", taskId);
+  const { error } = await supabase.from("tasks").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", taskId);
+  if (error) console.error("[updateTaskField] error:", error.code, error.message, "taskId:", taskId, "fields:", fields);
 }
 
 export async function setTaskAssignees(taskId: string, userIds: string[]): Promise<void> {

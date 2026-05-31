@@ -193,7 +193,6 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
     setOpenPop(null);
     setFiles([]);
     setSubtasks([]);
-    setLabels([]);
     setComments([]);
     setNewSubtask("");
     setAddingSubtask(false);
