@@ -61,7 +61,24 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
       })),
   }));
 
-  // Fallback: if no lists found yet, show default empty columns
+  // If no lists exist yet, create the 4 default ones in Supabase
+  if (lists.length === 0 && projectId) {
+    const defaults = [
+      { name: "Por Hacer",  color: "#EF4444", position: 0 },
+      { name: "En Progreso", color: "#3B82F6", position: 1 },
+      { name: "En Revisión", color: "#F59E0B", position: 2 },
+      { name: "Completado",  color: "#22C55E", position: 3 },
+    ];
+    const { data: created } = await supabase
+      .from("kanban_lists")
+      .insert(defaults.map((d) => ({ ...d, project_id: projectId })))
+      .select("id, name, color, position");
+
+    if (created) {
+      lists.push(...created.map((l) => ({ id: l.id, name: l.name, color: l.color, tasks: [] })));
+    }
+  }
+
   const initialLists: KanbanList[] = lists.length > 0 ? lists : [
     { id: "todo",        name: "Por Hacer",   color: "#EF4444", tasks: [] },
     { id: "in-progress", name: "En Progreso",  color: "#3B82F6", tasks: [] },
