@@ -1,20 +1,22 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export async function createTask(
   listId: string,
   title: string,
   priority: "low" | "med" | "high" | "urgent" = "med"
 ): Promise<{ id: string } | { error: string } | null> {
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user }, error: authError } = await authClient.auth.getUser();
   if (authError) {
     console.error("createTask auth error:", authError.message);
     return { error: "No autenticado" };
   }
   if (!user) return { error: "No autenticado" };
 
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("tasks")
     .insert({
@@ -36,7 +38,7 @@ export async function createTask(
 
 export async function moveTask(taskId: string, newListId: string): Promise<void> {
   if (!taskId || taskId.startsWith("temp-")) return;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   await supabase.from("tasks").update({ list_id: newListId }).eq("id", taskId);
 }
 
@@ -52,14 +54,14 @@ export async function updateTaskField(
   }
 ): Promise<void> {
   if (!taskId || taskId.startsWith("temp-")) return;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { error } = await supabase.from("tasks").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", taskId);
   if (error) console.error("[updateTaskField] error:", error.code, error.message, "taskId:", taskId, "fields:", fields);
 }
 
 export async function setTaskAssignees(taskId: string, userIds: string[]): Promise<void> {
   if (!taskId || taskId.startsWith("temp-")) return;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   await supabase.from("task_assignees").delete().eq("task_id", taskId);
   if (userIds.length > 0) {
     await supabase.from("task_assignees").insert(
@@ -70,7 +72,7 @@ export async function setTaskAssignees(taskId: string, userIds: string[]): Promi
 
 /* ── Labels ── */
 
-async function getWorkspaceIdForTask(supabase: Awaited<ReturnType<typeof createClient>>, taskId: string): Promise<string | null> {
+async function getWorkspaceIdForTask(supabase: ReturnType<typeof createServiceClient>, taskId: string): Promise<string | null> {
   const { data: task } = await supabase.from("tasks").select("list_id").eq("id", taskId).single();
   if (!task) return null;
   const { data: list } = await supabase.from("kanban_lists").select("project_id").eq("id", task.list_id).single();
@@ -84,7 +86,7 @@ export async function addTaskLabel(
   label: { name: string; light: string; solid: string }
 ): Promise<{ labelId: string } | null> {
   if (!taskId || taskId.startsWith("temp-")) return null;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const workspaceId = await getWorkspaceIdForTask(supabase, taskId);
   if (!workspaceId) return null;
 
@@ -115,7 +117,7 @@ export async function addTaskLabel(
 
 export async function removeTaskLabel(taskId: string, labelId: string): Promise<void> {
   if (!taskId || taskId.startsWith("temp-")) return;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   await supabase.from("task_labels").delete().eq("task_id", taskId).eq("label_id", labelId);
 }
 
@@ -123,25 +125,25 @@ export async function removeTaskLabel(taskId: string, labelId: string): Promise<
 
 export async function createSubtask(taskId: string, title: string): Promise<{ id: string } | null> {
   if (!taskId || taskId.startsWith("temp-")) return null;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("subtasks")
     .insert({ task_id: taskId, title, position: Date.now() })
     .select("id")
     .single();
-  if (error) return null;
+  if (error) { console.error("[createSubtask] error:", error.message); return null; }
   return data;
 }
 
 export async function toggleSubtask(subtaskId: string, isDone: boolean): Promise<void> {
-  if (!subtaskId || subtaskId.startsWith("s")) return; // skip mock IDs
-  const supabase = await createClient();
+  if (!subtaskId || subtaskId.startsWith("s")) return;
+  const supabase = createServiceClient();
   await supabase.from("subtasks").update({ is_completed: isDone }).eq("id", subtaskId);
 }
 
 export async function deleteSubtask(subtaskId: string): Promise<void> {
-  if (!subtaskId || subtaskId.startsWith("s")) return; // skip mock IDs
-  const supabase = await createClient();
+  if (!subtaskId || subtaskId.startsWith("s")) return;
+  const supabase = createServiceClient();
   await supabase.from("subtasks").delete().eq("id", subtaskId);
 }
 
@@ -151,7 +153,7 @@ export async function getTaskComments(taskId: string): Promise<
   { id: string; userId: string; body: string; createdAt: string; author: { name: string; avatar: string } }[]
 > {
   if (!taskId || taskId.startsWith("temp-")) return [];
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { data } = await supabase
     .from("task_comments")
     .select("id, user_id, body, created_at, profiles(name, avatar_url)")
@@ -178,9 +180,10 @@ export async function addTaskComment(
   body: string
 ): Promise<{ id: string; createdAt: string } | null> {
   if (!taskId || taskId.startsWith("temp-")) return null;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
   if (!user) return null;
+  const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("task_comments")
     .insert({ task_id: taskId, user_id: user.id, body })
@@ -191,7 +194,7 @@ export async function addTaskComment(
 }
 
 export async function deleteTaskComment(commentId: string): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   await supabase.from("task_comments").delete().eq("id", commentId);
 }
 
@@ -201,7 +204,7 @@ export async function getTaskAttachments(taskId: string): Promise<
   { id: string; name: string; sizeBytes: number; mimeType: string; storagePath: string; url: string | null }[]
 > {
   if (!taskId || taskId.startsWith("temp-")) return [];
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { data } = await supabase
     .from("task_attachments")
     .select("id, name, size_bytes, mime_type, storage_path")
@@ -230,9 +233,10 @@ export async function uploadTaskAttachment(
   file: File
 ): Promise<{ id: string; url: string | null } | null> {
   if (!taskId || taskId.startsWith("temp-")) return null;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
   if (!user) return null;
+  const supabase = createServiceClient();
 
   const ext = file.name.split(".").pop() ?? "bin";
   const storagePath = `${taskId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -264,7 +268,7 @@ export async function uploadTaskAttachment(
 }
 
 export async function deleteTaskAttachment(attachmentId: string, storagePath: string): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   await supabase.from("task_attachments").delete().eq("id", attachmentId);
   await supabase.storage.from("task-attachments").remove([storagePath]);
 }
