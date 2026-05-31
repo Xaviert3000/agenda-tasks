@@ -451,20 +451,14 @@ export function Sidebar({ workspace }: SidebarProps) {
     <aside className="w-[260px] h-full bg-white border-r border-gray-200 flex flex-col flex-shrink-0 overflow-hidden">
       {/* Header */}
       <div className="h-14 flex items-center justify-between px-4 border-b border-gray-100">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
             style={{ background: "linear-gradient(135deg, #2F3988, #7177B4)" }}
           >
-            A
+            {workspace.charAt(0).toUpperCase()}
           </div>
-          <div>
-            <div className="text-sm font-semibold text-gray-900 leading-tight">
-              agenda.ME
-            </div>
-            <div className="text-[10px] text-gray-400 leading-tight">Plan Pro</div>
-          </div>
-          <ChevronDown className="w-3.5 h-3.5 text-gray-400 ml-auto" />
+          <span className="text-sm font-semibold text-gray-900 truncate">{workspace}</span>
         </div>
         <button
           onClick={() => setCollapsed(true)}
