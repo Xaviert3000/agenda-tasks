@@ -6,10 +6,14 @@ export async function createTask(
   listId: string,
   title: string,
   priority: "low" | "med" | "high" | "urgent" = "med"
-): Promise<{ id: string } | null> {
+): Promise<{ id: string } | { error: string } | null> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError) {
+    console.error("createTask auth error:", authError.message);
+    return { error: "No autenticado" };
+  }
+  if (!user) return { error: "No autenticado" };
 
   const { data, error } = await supabase
     .from("tasks")
@@ -24,8 +28,8 @@ export async function createTask(
     .single();
 
   if (error) {
-    console.error("createTask error:", error.message);
-    return null;
+    console.error("createTask error:", error.code, error.message, "listId:", listId);
+    return { error: error.message };
   }
   return data;
 }

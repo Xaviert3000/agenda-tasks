@@ -77,6 +77,10 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
     // Persist to Supabase and replace temp ID with real one
     createTaskAction(listId, title, priority).then((result) => {
       if (!result) return;
+      if ("error" in result) {
+        console.error("[kanban] createTask failed:", result.error, "listId:", listId);
+        return;
+      }
       set((s) => ({
         lists: s.lists.map((list) =>
           list.id !== listId
