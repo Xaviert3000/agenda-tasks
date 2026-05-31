@@ -7,14 +7,16 @@ import {
   Plus, Check, Trash2, Download, FileText, FileImage,
   Film, Music, Archive, Upload,
 } from "lucide-react";
-import type { Task, Priority } from "@/types/domain";
+import type { Task, Priority, Assignee } from "@/types/domain";
 import { cn, PRIORITY_CONFIG } from "@/lib/utils";
-import { WORKSPACE_MEMBERS } from "@/lib/data/mockData";
 
 interface TaskDrawerProps {
   task: Task | null;
   onClose: () => void;
   onStatusChange?: (taskId: string, newListId: string) => void;
+  projectName?: string;
+  projectIcon?: string;
+  projectMembers?: Assignee[];
 }
 
 const STATUS_OPTIONS = [
@@ -78,7 +80,7 @@ function Popover({ trigger, children, open, onToggle }: {
   );
 }
 
-export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
+export function TaskDrawer({ task, onClose, onStatusChange, projectName, projectIcon, projectMembers = [] }: TaskDrawerProps) {
   /* ── local state ── */
   const [status, setStatus] = useState(
     STATUS_OPTIONS.find((s) => s.id === task?.listId) ?? STATUS_OPTIONS[0]
@@ -126,8 +128,33 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [taskPriority, setTaskPriority] = useState<Priority>(task?.priority ?? "med");
+  const [allLabels, setAllLabels] = useState(ALL_LABELS);
+  const [newLabelName, setNewLabelName] = useState("");
+  const [creatingLabel, setCreatingLabel] = useState(false);
+
+  const LABEL_COLORS = [
+    { light: "#DBEAFE", solid: "#3B82F6" },
+    { light: "#E0E7FF", solid: "#6366F1" },
+    { light: "#EDE9FE", solid: "#8B5CF6" },
+    { light: "#DCFCE7", solid: "#22C55E" },
+    { light: "#FEE2E2", solid: "#EF4444" },
+    { light: "#FEF3C7", solid: "#F59E0B" },
+    { light: "#CFFAFE", solid: "#06B6D4" },
+    { light: "#D1FAE5", solid: "#10B981" },
+  ];
+
+  const createLabel = () => {
+    if (!newLabelName.trim()) return;
+    const color = LABEL_COLORS[allLabels.length % LABEL_COLORS.length];
+    const newLabel = { id: `custom-${Date.now()}`, name: newLabelName.trim(), ...color };
+    setAllLabels((p) => [...p, newLabel]);
+    setLabels((p) => [...p, newLabel]);
+    setNewLabelName("");
+    setCreatingLabel(false);
+  };
 
   /* popovers */
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const [openPop, setOpenPop] = useState<"status" | "assign" | "label" | "date" | "estimate" | "priority" | null>(null);
   const toggle = (pop: typeof openPop) => setOpenPop((p) => (p === pop ? null : pop));
 
@@ -146,6 +173,8 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
     setNewSubtask("");
     setAddingSubtask(false);
     setSubtaskPop(null);
+    setCreatingLabel(false);
+    setNewLabelName("");
   }, [task?.id]);
 
   /* Escape key */
@@ -183,7 +212,7 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
   const completedCount = subtasks.filter((s) => s.done).length;
   const pct = subtasks.length > 0 ? Math.round((completedCount / subtasks.length) * 100) : 0;
 
-  const toggleAssignee = (member: typeof WORKSPACE_MEMBERS[0]) => {
+  const toggleAssignee = (member: typeof projectMembers[0]) => {
     setAssignees((prev) =>
       prev.find((a) => a.id === member.id)
         ? prev.filter((a) => a.id !== member.id)
@@ -408,7 +437,7 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
                     >
                       <div className="py-1 min-w-[180px]">
                         <p className="px-3 pt-2 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Asignar a</p>
-                        {WORKSPACE_MEMBERS.map((m) => {
+                        {projectMembers.map((m) => {
                           const isAssigned = sub.assignee?.id === m.id;
                           return (
                             <button
@@ -695,7 +724,7 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
               >
                 <div className="py-1">
                   <p className="px-3 pt-2 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Miembros</p>
-                  {WORKSPACE_MEMBERS.map((m) => {
+                  {projectMembers.map((m) => {
                     const isAssigned = assignees.some((a) => a.id === m.id);
                     return (
                       <button
@@ -720,25 +749,27 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
               <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <Calendar className="w-3 h-3" /> Fecha de vencimiento
               </p>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-                <button className={cn(
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="sr-only"
+              />
+              <button
+                onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
+                className={cn(
                   "text-xs font-medium px-2.5 py-1.5 rounded-lg w-full text-left transition-colors border",
                   dueDate
                     ? "bg-blue-50 text-brand-navy border-blue-100 hover:bg-blue-100"
                     : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
-                )}>
-                  <span className="flex items-center gap-2">
-                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
-                    {dueDate ? formatDisplayDate(dueDate) : "Sin fecha"}
-                  </span>
-                </button>
-              </div>
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                  {dueDate ? formatDisplayDate(dueDate) : "Sin fecha"}
+                </span>
+              </button>
               {dueDate && (
                 <button
                   onClick={() => setDueDate("")}
@@ -782,7 +813,7 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
               >
                 <div className="py-1">
                   <p className="px-3 pt-2 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Etiquetas</p>
-                  {ALL_LABELS.map((label) => {
+                  {allLabels.map((label) => {
                     const active = labels.some((l) => l.id === label.id);
                     return (
                       <button
@@ -800,6 +831,32 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
                       </button>
                     );
                   })}
+                  <div className="border-t border-gray-100 mt-1 pt-1 px-3 pb-2">
+                    {creatingLabel ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <input
+                          autoFocus
+                          type="text"
+                          value={newLabelName}
+                          onChange={(e) => setNewLabelName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") createLabel();
+                            if (e.key === "Escape") { setCreatingLabel(false); setNewLabelName(""); }
+                          }}
+                          placeholder="Nombre de etiqueta"
+                          className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-brand-cyan min-w-0"
+                        />
+                        <button onClick={createLabel} className="text-xs px-2 py-1 rounded font-medium text-white flex-shrink-0" style={{ background: "#2F3988" }}>OK</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setCreatingLabel(true)}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 mt-1 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" /> Nueva etiqueta
+                      </button>
+                    )}
+                  </div>
                 </div>
               </Popover>
             </div>
@@ -875,13 +932,15 @@ export function TaskDrawer({ task, onClose, onStatusChange }: TaskDrawerProps) {
             <div className="border-t border-gray-100" />
 
             {/* Proyecto */}
-            <div>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Proyecto</p>
-              <div className="flex items-center gap-2">
-                <span className="text-base">🛍️</span>
-                <span className="text-xs text-gray-700 font-medium">E-Commerce Website</span>
+            {(projectName || projectIcon) && (
+              <div>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Proyecto</p>
+                <div className="flex items-center gap-2">
+                  {projectIcon && <span className="text-base">{projectIcon}</span>}
+                  <span className="text-xs text-gray-700 font-medium">{projectName}</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

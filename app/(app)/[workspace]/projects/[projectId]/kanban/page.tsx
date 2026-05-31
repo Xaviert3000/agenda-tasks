@@ -11,7 +11,12 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
 
   return (
     <div className="h-full overflow-hidden px-6 pt-5">
-      <KanbanBoardWrapper initialLists={project.lists} />
+      <KanbanBoardWrapper
+        initialLists={project.lists}
+        projectName={project.name}
+        projectIcon={project.icon}
+        projectMembers={project.members}
+      />
     </div>
   );
 }

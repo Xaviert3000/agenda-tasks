@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { KanbanList } from "@/types/domain";
+import type { KanbanList, Assignee } from "@/types/domain";
 
 const KanbanBoard = dynamic(
   () => import("./KanbanBoard").then((m) => m.KanbanBoard),
@@ -41,8 +41,11 @@ const KanbanBoard = dynamic(
 
 interface KanbanBoardWrapperProps {
   initialLists: KanbanList[];
+  projectName?: string;
+  projectIcon?: string;
+  projectMembers?: Assignee[];
 }
 
-export function KanbanBoardWrapper({ initialLists }: KanbanBoardWrapperProps) {
-  return <KanbanBoard initialLists={initialLists} />;
+export function KanbanBoardWrapper({ initialLists, projectName, projectIcon, projectMembers }: KanbanBoardWrapperProps) {
+  return <KanbanBoard initialLists={initialLists} projectName={projectName} projectIcon={projectIcon} projectMembers={projectMembers} />;
 }

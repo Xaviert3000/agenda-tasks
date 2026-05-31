@@ -13,7 +13,7 @@ import {
   type DragOverEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import type { KanbanList, Task } from "@/types/domain";
+import type { KanbanList, Task, Assignee } from "@/types/domain";
 import { useKanbanStore } from "@/lib/store/kanbanStore";
 import { useFilteredLists } from "@/lib/hooks/useFilteredLists";
 import { KanbanColumn } from "./KanbanColumn";
@@ -22,12 +22,15 @@ import { TaskDrawer } from "./TaskDrawer";
 
 interface KanbanBoardProps {
   initialLists: KanbanList[];
+  projectName?: string;
+  projectIcon?: string;
+  projectMembers?: Assignee[];
 }
 
 /* Read current lists without creating a reactive dependency */
 const getLists = () => useKanbanStore.getState().lists;
 
-export function KanbanBoard({ initialLists }: KanbanBoardProps) {
+export function KanbanBoard({ initialLists, projectName, projectIcon, projectMembers }: KanbanBoardProps) {
   const { setLists, addTask, moveTask } = useKanbanStore();
   const displayLists = useFilteredLists(initialLists);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -193,6 +196,9 @@ export function KanbanBoard({ initialLists }: KanbanBoardProps) {
           task={selectedTask}
           onClose={handleCloseDrawer}
           onStatusChange={handleStatusChange}
+          projectName={projectName}
+          projectIcon={projectIcon}
+          projectMembers={projectMembers}
         />
       )}
     </>
