@@ -179,7 +179,7 @@ export default function SettingsPage() {
       // Load workspace id + members
       const { data: ws } = await supabase
         .from("workspaces")
-        .select("id")
+        .select("id, created_by")
         .eq("slug", workspace)
         .single();
       if (!ws) return;
@@ -190,11 +190,9 @@ export default function SettingsPage() {
         .select("user_id, role, profiles(id, name, avatar_url)")
         .eq("workspace_id", ws.id);
 
-      if (!members) return;
-
-      const loaded: TeamMember[] = members.map((m) => {
+      const roleMap: Record<string, string> = { owner: "Admin", admin: "Admin", member: "Miembro" };
+      const loaded: TeamMember[] = (members ?? []).map((m) => {
         const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-        const roleMap: Record<string, string> = { owner: "Admin", admin: "Admin", member: "Miembro" };
         return {
           id: p?.id ?? m.user_id,
           name: p?.name ?? "Usuario",
@@ -203,6 +201,23 @@ export default function SettingsPage() {
           avatar_url: p?.avatar_url ?? null,
         };
       });
+
+      // Include workspace creator if not already in workspace_members
+      if (ws.created_by && !loaded.find((m) => m.id === ws.created_by)) {
+        const { data: creatorProfile } = await supabase
+          .from("profiles")
+          .select("id, name, avatar_url")
+          .eq("id", ws.created_by)
+          .single();
+        loaded.unshift({
+          id: ws.created_by,
+          name: creatorProfile?.name ?? "Usuario",
+          email: "",
+          role: "Admin",
+          avatar_url: creatorProfile?.avatar_url ?? null,
+        });
+      }
+
       setTeam(loaded);
       setUsageUsers(loaded.length);
 
