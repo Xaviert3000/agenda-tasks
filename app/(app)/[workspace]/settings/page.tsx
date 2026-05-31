@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { applyTheme, applyDensity, saveAppearance, type Theme, type Density } from "@/components/shared/AppearanceProvider";
 import {
   User,
   Building2,
@@ -95,9 +96,9 @@ export default function SettingsPage() {
   const [pushNoti,  setPushNoti]   = useState(false);
 
   /* Apariencia */
-  const [theme,  setTheme]  = useState<"light" | "dark" | "system">("light");
-  const [lang,   setLang]   = useState("es");
-  const [density, setDensity] = useState<"compact" | "default" | "comfortable">("default");
+  const [theme,   setTheme]   = useState<Theme>("light");
+  const [lang,    setLang]    = useState("es");
+  const [density, setDensity] = useState<Density>("default");
 
   /* Workspace */
   const [wsName, setWsName] = useState("agenda.ME");
@@ -155,6 +156,12 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setEmail(user.email ?? "");
+
+      // Load appearance preferences
+      const appearance = user.user_metadata?.appearance;
+      if (appearance?.theme)   { setTheme(appearance.theme);     applyTheme(appearance.theme); }
+      if (appearance?.density) { setDensity(appearance.density); applyDensity(appearance.density); }
+      if (appearance?.lang)    setLang(appearance.lang);
 
       // Load integration states from user metadata
       const savedIntegrations = user.user_metadata?.integrations ?? {};
@@ -216,6 +223,10 @@ export default function SettingsPage() {
         .from("profiles")
         .update({ name, updated_at: new Date().toISOString() })
         .eq("id", user.id);
+    }
+    // Save appearance
+    if (active === "apariencia") {
+      await saveAppearance(theme, density, lang);
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -592,7 +603,7 @@ export default function SettingsPage() {
           {(["light", "dark", "system"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => setTheme(t)}
+              onClick={() => { setTheme(t); applyTheme(t); }}
               className={cn(
                 "relative border-2 rounded-xl overflow-hidden transition-all",
                 theme === t ? "border-[#2F3988]" : "border-gray-200 hover:border-gray-300"
@@ -621,7 +632,7 @@ export default function SettingsPage() {
           {(["compact", "default", "comfortable"] as const).map((d) => (
             <button
               key={d}
-              onClick={() => setDensity(d)}
+              onClick={() => { setDensity(d); applyDensity(d); }}
               className={cn(
                 "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
                 density === d

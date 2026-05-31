@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { TopbarWrapper } from "@/components/shared/TopbarWrapper";
 import { PendingProUpgrade } from "@/components/shared/PendingProUpgrade";
+import { AppearanceProvider } from "@/components/shared/AppearanceProvider";
 
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
@@ -16,6 +17,7 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="flex h-full">
+      <AppearanceProvider />
       <PendingProUpgrade currentSlug={workspace} />
       <Suspense fallback={<div className="w-56 flex-shrink-0 bg-white border-r border-gray-100" />}>
         <Sidebar workspace={workspace} />
