@@ -132,7 +132,6 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
     const color = LABEL_COLORS[allLabels.length % LABEL_COLORS.length];
     const tempLabel = { id: `custom-${Date.now()}`, name: newLabelName.trim(), ...color };
     setAllLabels((p) => [...p, tempLabel]);
-    // Optimistic add; server action will replace ID with real UUID
     setLabels((p) => {
       const next = [...p, tempLabel];
       addTaskLabel(task?.id ?? "", { name: tempLabel.name, light: tempLabel.light, solid: tempLabel.solid })
