@@ -7,33 +7,29 @@ import { PRIORITY_CONFIG } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { Priority } from "@/types/domain";
 
-const STATUS_OPTIONS = [
-  { id: "todo",        label: "Por Hacer",  color: "#EF4444" },
-  { id: "in-progress", label: "En Progreso", color: "#3B82F6" },
-  { id: "review",      label: "En Revisión", color: "#F59E0B" },
-  { id: "done",        label: "Completado",  color: "#22C55E" },
-];
-
 interface NewTaskModalProps {
   open: boolean;
   onClose: () => void;
   defaultListId?: string;
 }
 
-export function NewTaskModal({ open, onClose, defaultListId = "todo" }: NewTaskModalProps) {
-  const { addTask } = useKanbanStore();
+export function NewTaskModal({ open, onClose, defaultListId }: NewTaskModalProps) {
+  const { addTask, lists } = useKanbanStore();
+  const STATUS_OPTIONS = lists.map((l) => ({ id: l.id, label: l.name, color: l.color }));
+  const firstListId = lists[0]?.id ?? "todo";
   const [title, setTitle]       = useState("");
-  const [listId, setListId]     = useState(defaultListId);
+  const [listId, setListId]     = useState<string>(defaultListId ?? "");
   const [priority, setPriority] = useState<Priority>("med");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
       setTitle("");
-      setListId(defaultListId);
+      setListId(defaultListId ?? firstListId ?? "");
       setPriority("med");
       setTimeout(() => inputRef.current?.focus(), 60);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultListId]);
 
   useEffect(() => {

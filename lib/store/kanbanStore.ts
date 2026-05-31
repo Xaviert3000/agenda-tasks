@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { KanbanList, Task, Priority } from "@/types/domain";
+import { createTask as createTaskAction, moveTask as moveTaskAction } from "@/app/actions/tasks";
 
 type Updater<T> = T | ((prev: T) => T);
 
@@ -34,7 +35,7 @@ type KanbanState = {
   clearFilters: () => void;
 };
 
-export const useKanbanStore = create<KanbanState>((set) => ({
+export const useKanbanStore = create<KanbanState>((set, get) => ({
   lists: [],
   projectName: "",
   projectIcon: "📋",
@@ -48,33 +49,51 @@ export const useKanbanStore = create<KanbanState>((set) => ({
   setLists: (updater) =>
     set((s) => ({ lists: typeof updater === "function" ? updater(s.lists) : updater })),
 
-  addTask: (listId, title, priority = "med") =>
+  addTask: (listId, title, priority = "med") => {
+    // Optimistic local ID — replaced by Supabase ID on success
+    const tempId = `temp-${Date.now()}`;
+    const newTask: Task = {
+      id: tempId,
+      title,
+      description: "",
+      labels: [],
+      priority,
+      assignees: [],
+      subtasks: { total: 0, completed: 0 },
+      attachmentCount: 0,
+      commentCount: 0,
+      listId,
+    };
+
+    // Update UI immediately (optimistic)
     set((s) => ({
       lists: s.lists.map((list) =>
         list.id !== listId
           ? list
-          : {
-              ...list,
-              tasks: [
-                ...list.tasks,
-                {
-                  id: `t${Date.now()}`,
-                  title,
-                  description: "",
-                  labels: [],
-                  priority,
-                  assignees: [],
-                  subtasks: { total: 0, completed: 0 },
-                  attachmentCount: 0,
-                  commentCount: 0,
-                  listId,
-                } satisfies Task,
-              ],
-            }
+          : { ...list, tasks: [...list.tasks, newTask] }
       ),
-    })),
+    }));
 
-  moveTask: (taskId, newListId) =>
+    // Persist to Supabase and replace temp ID with real one
+    createTaskAction(listId, title, priority).then((result) => {
+      if (!result) return;
+      set((s) => ({
+        lists: s.lists.map((list) =>
+          list.id !== listId
+            ? list
+            : {
+                ...list,
+                tasks: list.tasks.map((t) =>
+                  t.id === tempId ? { ...t, id: result.id } : t
+                ),
+              }
+        ),
+      }));
+    });
+  },
+
+  moveTask: (taskId, newListId) => {
+    // Optimistic update
     set((s) => {
       let moved: Task | null = null;
       const without = s.lists.map((list) => {
@@ -89,5 +108,11 @@ export const useKanbanStore = create<KanbanState>((set) => ({
           list.id === newListId ? { ...list, tasks: [...list.tasks, moved!] } : list
         ),
       };
-    }),
+    });
+
+    // Skip Supabase sync for optimistic/mock IDs (UUIDs contain hyphens)
+    if (taskId.includes("-") && !taskId.startsWith("temp-")) {
+      moveTaskAction(taskId, newListId);
+    }
+  },
 }));
