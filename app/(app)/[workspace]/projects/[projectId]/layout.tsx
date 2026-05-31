@@ -8,7 +8,8 @@ import {
   Search, SlidersHorizontal, Users, X, UserPlus, Check,
   AlertCircle, Clock, Globe, Lock, ChevronDown,
 } from "lucide-react";
-import { getProjectById, WORKSPACE_MEMBERS } from "@/lib/data/mockData";
+import { WORKSPACE_MEMBERS } from "@/lib/data/mockData";
+import { createClient } from "@/lib/supabase/client";
 import { useKanbanStore } from "@/lib/store/kanbanStore";
 import type { TaskFilters } from "@/lib/store/kanbanStore";
 import { useProjectSettingsStore } from "@/lib/store/projectSettingsStore";
@@ -35,9 +36,8 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
 
   const workspace = params.workspace as string;
-  const projectId = params.projectId as string;
+  const listId    = params.projectId as string; // route param is actually the list ID
 
-  const project        = getProjectById(projectId);
   const setLists       = useKanbanStore((s) => s.setLists);
   const setProjectMeta = useKanbanStore((s) => s.setProjectMeta);
   const searchQuery    = useKanbanStore((s) => s.searchQuery);
@@ -46,12 +46,39 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   const setTaskFilters = useKanbanStore((s) => s.setTaskFilters);
   const clearFilters   = useKanbanStore((s) => s.clearFilters);
 
+  // Real project data from Supabase
+  const [projectName, setProjectName] = useState("Proyecto");
+  const [projectIcon, setProjectIcon] = useState("📋");
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      // Get project via the list ID
+      const { data: list } = await supabase
+        .from("kanban_lists")
+        .select("project_id")
+        .eq("id", listId)
+        .single();
+      if (!list) return;
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("name, icon")
+        .eq("id", list.project_id)
+        .single();
+      if (proj) {
+        setProjectName(proj.name);
+        setProjectIcon(proj.icon ?? "📋");
+        setProjectMeta(proj.name, proj.icon ?? "📋");
+      }
+    })();
+  }, [listId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const currentView = pathname.split("/").pop();
 
   /* ── Visibility ── */
   const isProjectPublic  = useProjectSettingsStore((s) => s.isProjectPublic);
   const setProjectPublic = useProjectSettingsStore((s) => s.setProjectPublic);
-  const isPublic         = isProjectPublic(projectId);
+  const isPublic         = isProjectPublic(listId);
   const [showVisibility, setShowVisibility] = useState(false);
   const visibilityRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +92,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   }, [showVisibility]);
 
   /* ── Members (invite) ── */
-  const [members, setMembers]           = useState<Assignee[]>(project.members);
+  const [members, setMembers]           = useState<Assignee[]>([]);
   const [showInvite, setShowInvite]     = useState(false);
   const [inviteSearch, setInviteSearch] = useState("");
   const [justAdded, setJustAdded]       = useState<Set<string>>(new Set());
@@ -89,16 +116,13 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     (taskFilters.dueSoon ? 1 : 0) +
     (taskFilters.assignedToMe ? 1 : 0);
 
-  /* ── Reset on project change ── */
+  /* ── Reset on list change ── */
   useEffect(() => {
-    setLists(project.lists);
-    setProjectMeta(project.name, project.icon);
-    setMembers(project.members);
     setJustAdded(new Set());
     clearFilters();
     setShowSearch(false);
     setShowFilter(false);
-  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [listId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Search auto-focus ── */
   useEffect(() => {
@@ -191,8 +215,8 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
       {/* ── Project header ── */}
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{project.icon}</span>
-          <h1 className="text-lg font-bold text-gray-900">{project.name}</h1>
+          <span className="text-2xl">{projectIcon}</span>
+          <h1 className="text-lg font-bold text-gray-900">{projectName}</h1>
 
           {/* ── Visibility badge ── */}
           <div ref={visibilityRef} className="relative">
@@ -220,7 +244,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
                 {/* Public option */}
                 <button
-                  onClick={() => { setProjectPublic(projectId, true); setShowVisibility(false); }}
+                  onClick={() => { setProjectPublic(listId, true); setShowVisibility(false); }}
                   className={cn(
                     "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all text-left",
                     isPublic ? "bg-green-50" : "hover:bg-gray-50"
@@ -240,7 +264,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
                 {/* Private option */}
                 <button
-                  onClick={() => { setProjectPublic(projectId, false); setShowVisibility(false); }}
+                  onClick={() => { setProjectPublic(listId, false); setShowVisibility(false); }}
                   className={cn(
                     "w-full flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all text-left",
                     !isPublic ? "bg-blue-50" : "hover:bg-gray-50"
@@ -355,7 +379,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
             const isActive = currentView === view.id;
             return (
               <Link key={view.id}
-                href={`/${workspace}/projects/${projectId}/${view.id}`}
+                href={`/${workspace}/projects/${listId}/${view.id}`}
                 className={cn("flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors",
                   isActive ? "border-[#2F3988] text-[#2F3988]" : "border-transparent text-gray-500 hover:text-gray-700")}>
                 <Icon className="w-4 h-4" />
