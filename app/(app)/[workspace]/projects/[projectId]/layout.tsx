@@ -8,7 +8,6 @@ import {
   Search, SlidersHorizontal, Users, X, UserPlus, Check,
   AlertCircle, Clock, Globe, Lock, ChevronDown,
 } from "lucide-react";
-import { WORKSPACE_MEMBERS } from "@/lib/data/mockData";
 import { createClient } from "@/lib/supabase/client";
 import { useKanbanStore } from "@/lib/store/kanbanStore";
 import type { TaskFilters } from "@/lib/store/kanbanStore";
@@ -72,6 +71,34 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
       }
     })();
   }, [listId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real workspace members from Supabase
+  const [workspaceMembers, setWorkspaceMembers] = useState<{ id: string; name: string; avatar: string; isOnline: boolean }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: ws } = await supabase
+        .from("workspaces").select("id").eq("slug", workspace).single();
+      if (!ws) return;
+      const { data } = await supabase
+        .from("workspace_members")
+        .select("user_id, profiles(id, name, avatar_url)")
+        .eq("workspace_id", ws.id);
+      if (!data) return;
+      setWorkspaceMembers(
+        data.map((m) => {
+          const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+          return {
+            id: p?.id ?? m.user_id,
+            name: p?.name ?? "Usuario",
+            avatar: p?.avatar_url ?? `https://api.dicebear.com/7.x/initials/svg?seed=${p?.name ?? "U"}`,
+            isOnline: false,
+          };
+        })
+      );
+    })();
+  }, [workspace]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentView = pathname.split("/").pop();
 
@@ -193,11 +220,11 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   });
 
   const memberIds = new Set(members.map((m) => m.id));
-  const filteredCandidates = WORKSPACE_MEMBERS.filter((wm) =>
+  const filteredCandidates = workspaceMembers.filter((wm) =>
     wm.name.toLowerCase().includes(inviteSearch.toLowerCase())
   );
 
-  const handleToggleMember = (wm: typeof WORKSPACE_MEMBERS[number]) => {
+  const handleToggleMember = (wm: { id: string; name: string; avatar: string }) => {
     if (memberIds.has(wm.id)) {
       setMembers((prev) => prev.filter((m) => m.id !== wm.id));
       setJustAdded((prev) => { const n = new Set(prev); n.delete(wm.id); return n; });
@@ -331,7 +358,9 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
                 </div>
                 <div className="px-2 pb-2 max-h-56 overflow-y-auto space-y-0.5">
                   {filteredCandidates.length === 0
-                    ? <p className="text-xs text-gray-400 text-center py-4">Sin resultados</p>
+                    ? <p className="text-xs text-gray-400 text-center py-4">
+                        {workspaceMembers.length === 0 ? "Sin miembros en el workspace aún" : "Sin resultados"}
+                      </p>
                     : filteredCandidates.map((wm) => {
                         const isIn = memberIds.has(wm.id);
                         return (
@@ -340,12 +369,9 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
                               isIn ? "bg-blue-50/60 hover:bg-blue-100/60" : "hover:bg-gray-50")}>
                             <div className="relative flex-shrink-0">
                               <img src={wm.avatar} alt={wm.name} className="w-8 h-8 rounded-full" />
-                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white",
-                                wm.isOnline ? "bg-green-400" : "bg-gray-300")} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-gray-800 truncate">{wm.name}</p>
-                              <p className="text-[10px] text-gray-400">{wm.isOnline ? "En línea" : "Desconectado"}</p>
                             </div>
                             <div className={cn("w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all",
                               isIn ? "bg-[#2F3988] text-white" : "border-2 border-gray-300")}>
@@ -473,18 +499,21 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
                 <div className="px-4 py-3 border-b border-gray-100">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Asignado a</p>
                   <div className="space-y-1">
-                    {WORKSPACE_MEMBERS.map((m) => {
-                      const active = draft.assigneeIds.includes(m.id);
-                      return (
-                        <button key={m.id} onClick={() => toggleAssignee(m.id)}
-                          className={cn("w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-all",
-                            active ? "bg-blue-50 text-[#2F3988]" : "hover:bg-gray-50 text-gray-700")}>
-                          <img src={m.avatar} alt={m.name} className="w-6 h-6 rounded-full flex-shrink-0" />
-                          <span className="text-xs flex-1 text-left font-medium">{m.name}</span>
-                          {active && <Check className="w-3.5 h-3.5 text-[#2F3988]" />}
-                        </button>
-                      );
-                    })}
+                    {workspaceMembers.length === 0
+                      ? <p className="text-xs text-gray-400 px-2 py-1">Sin miembros aún</p>
+                      : workspaceMembers.map((m) => {
+                          const active = draft.assigneeIds.includes(m.id);
+                          return (
+                            <button key={m.id} onClick={() => toggleAssignee(m.id)}
+                              className={cn("w-full flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-all",
+                                active ? "bg-blue-50 text-[#2F3988]" : "hover:bg-gray-50 text-gray-700")}>
+                              <img src={m.avatar} alt={m.name} className="w-6 h-6 rounded-full flex-shrink-0" />
+                              <span className="text-xs flex-1 text-left font-medium">{m.name}</span>
+                              {active && <Check className="w-3.5 h-3.5 text-[#2F3988]" />}
+                            </button>
+                          );
+                        })
+                    }
                   </div>
                 </div>
 
