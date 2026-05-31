@@ -34,3 +34,30 @@ export async function moveTask(taskId: string, newListId: string): Promise<void>
   const supabase = await createClient();
   await supabase.from("tasks").update({ list_id: newListId }).eq("id", taskId);
 }
+
+export async function updateTaskField(
+  taskId: string,
+  fields: {
+    title?: string;
+    description?: string;
+    priority?: "low" | "med" | "high" | "urgent";
+    due_date?: string | null;
+    list_id?: string;
+  }
+): Promise<void> {
+  if (!taskId || taskId.startsWith("temp-")) return;
+  const supabase = await createClient();
+  await supabase.from("tasks").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", taskId);
+}
+
+export async function setTaskAssignees(taskId: string, userIds: string[]): Promise<void> {
+  if (!taskId || taskId.startsWith("temp-")) return;
+  const supabase = await createClient();
+  // Delete existing and re-insert
+  await supabase.from("task_assignees").delete().eq("task_id", taskId);
+  if (userIds.length > 0) {
+    await supabase.from("task_assignees").insert(
+      userIds.map((uid) => ({ task_id: taskId, user_id: uid }))
+    );
+  }
+}

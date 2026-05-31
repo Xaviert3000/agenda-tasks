@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   X, ChevronDown, Paperclip, MessageSquare, CheckSquare,
   Square, Calendar, User, Tag, Clock, MoreHorizontal, Send,
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { Task, Priority, Assignee } from "@/types/domain";
 import { cn, PRIORITY_CONFIG } from "@/lib/utils";
+import { updateTaskField, setTaskAssignees } from "@/app/actions/tasks";
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -153,6 +154,21 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
     setCreatingLabel(false);
   };
 
+  /* ── persist helpers ── */
+  const taskId = task?.id ?? "";
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveField = useCallback((fields: Parameters<typeof updateTaskField>[1]) => {
+    if (!taskId || taskId.startsWith("temp-")) return;
+    updateTaskField(taskId, fields);
+  }, [taskId]);
+
+  const saveDebounced = useCallback((fields: Parameters<typeof updateTaskField>[1], ms = 600) => {
+    if (!taskId || taskId.startsWith("temp-")) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => updateTaskField(taskId, fields), ms);
+  }, [taskId]);
+
   /* popovers */
   const dateInputRef = useRef<HTMLInputElement>(null);
   const [openPop, setOpenPop] = useState<"status" | "assign" | "label" | "date" | "estimate" | "priority" | null>(null);
@@ -213,11 +229,13 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   const pct = subtasks.length > 0 ? Math.round((completedCount / subtasks.length) * 100) : 0;
 
   const toggleAssignee = (member: typeof projectMembers[0]) => {
-    setAssignees((prev) =>
-      prev.find((a) => a.id === member.id)
+    setAssignees((prev) => {
+      const next = prev.find((a) => a.id === member.id)
         ? prev.filter((a) => a.id !== member.id)
-        : [...prev, { id: member.id, name: member.name, avatar: member.avatar }]
-    );
+        : [...prev, { id: member.id, name: member.name, avatar: member.avatar }];
+      setTaskAssignees(taskId, next.map((a) => a.id));
+      return next;
+    });
   };
 
   const toggleLabel = (label: typeof ALL_LABELS[0]) => {
@@ -293,6 +311,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                       setStatus(s);
                       setOpenPop(null);
                       if (task) onStatusChange?.(task.id, s.id);
+                      saveField({ list_id: s.id });
                     }}
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
                   >
@@ -325,7 +344,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                     {(Object.entries(PRIORITY_CONFIG) as [Priority, typeof PRIORITY_CONFIG[Priority]][]).map(([key, cfg]) => (
                       <button
                         key={key}
-                        onClick={() => { setTaskPriority(key); setOpenPop(null); }}
+                        onClick={() => { setTaskPriority(key); setOpenPop(null); saveField({ priority: key }); }}
                         className="w-full flex items-center gap-2.5 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
                       >
                         <span
@@ -368,6 +387,10 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
               className="text-xl font-bold text-gray-900 leading-snug outline-none rounded px-1 -mx-1 hover:bg-gray-50 cursor-text transition-colors"
               contentEditable
               suppressContentEditableWarning
+              onBlur={(e) => {
+                const val = e.currentTarget.textContent?.trim() ?? "";
+                if (val) saveDebounced({ title: val }, 0);
+              }}
             >
               {task?.title}
             </h2>
@@ -379,6 +402,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                 className="text-sm text-gray-600 leading-relaxed outline-none min-h-[52px] rounded-lg p-3 border border-transparent hover:bg-gray-50 hover:border-gray-200 focus:bg-white focus:border-brand-cyan cursor-text transition-colors"
                 contentEditable
                 suppressContentEditableWarning
+                onBlur={(e) => saveDebounced({ description: e.currentTarget.textContent?.trim() ?? "" }, 0)}
               >
                 {task?.description ?? "Agregar descripción..."}
               </div>
@@ -701,7 +725,11 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                     <img src={a.avatar} alt={a.name} className="w-6 h-6 rounded-full flex-shrink-0" />
                     <span className="text-xs text-gray-700 flex-1 truncate">{a.name}</span>
                     <button
-                      onClick={() => setAssignees((p) => p.filter((x) => x.id !== a.id))}
+                      onClick={() => setAssignees((p) => {
+                        const next = p.filter((x) => x.id !== a.id);
+                        setTaskAssignees(taskId, next.map((x) => x.id));
+                        return next;
+                      })}
                       className="opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 transition-all"
                     >
                       <X className="w-2.5 h-2.5" />
@@ -753,7 +781,10 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                 ref={dateInputRef}
                 type="date"
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={(e) => {
+                  setDueDate(e.target.value);
+                  saveField({ due_date: e.target.value || null });
+                }}
                 className="sr-only"
               />
               <button
@@ -772,7 +803,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
               </button>
               {dueDate && (
                 <button
-                  onClick={() => setDueDate("")}
+                  onClick={() => { setDueDate(""); saveField({ due_date: null }); }}
                   className="text-[11px] text-gray-400 hover:text-danger transition-colors mt-1 ml-1"
                 >
                   Quitar fecha
