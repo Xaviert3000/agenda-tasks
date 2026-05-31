@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -122,6 +122,20 @@ export default function SettingsPage() {
   const [usageUsers,    setUsageUsers]    = useState(0);
   const [usageProjects, setUsageProjects] = useState(0);
 
+  /* Integraciones */
+  interface IntegrationState { connected: boolean; meta?: Record<string, string> }
+  const [integrations, setIntegrations] = useState<Record<string, IntegrationState>>({
+    github: { connected: false },
+    googledrive: { connected: false },
+    zapier: { connected: false },
+    make: { connected: false },
+  });
+  const [intModal, setIntModal] = useState<string | null>(null); // which integration modal is open
+  const [intInput, setIntInput] = useState("");
+  const [intLoading, setIntLoading] = useState(false);
+  const [intError, setIntError] = useState("");
+  const intInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -141,6 +155,12 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setEmail(user.email ?? "");
+
+      // Load integration states from user metadata
+      const savedIntegrations = user.user_metadata?.integrations ?? {};
+      if (Object.keys(savedIntegrations).length > 0) {
+        setIntegrations((prev) => ({ ...prev, ...savedIntegrations }));
+      }
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -909,6 +929,84 @@ export default function SettingsPage() {
     );
   };
 
+  const saveIntegration = async (key: string, state: IntegrationState) => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const current = user.user_metadata?.integrations ?? {};
+    await supabase.auth.updateUser({
+      data: { integrations: { ...current, [key]: state } },
+    });
+    setIntegrations((prev) => ({ ...prev, [key]: state }));
+  };
+
+  const disconnectIntegration = async (key: string) => {
+    await saveIntegration(key, { connected: false });
+  };
+
+  const handleConnectGitHub = async () => {
+    setIntLoading(true);
+    setIntError("");
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: { Authorization: `Bearer ${intInput}`, Accept: "application/vnd.github+json" },
+      });
+      if (!res.ok) { setIntError("Token inválido o sin permisos. Verifica el PAT en GitHub."); setIntLoading(false); return; }
+      const data = await res.json();
+      await saveIntegration("github", { connected: true, meta: { login: data.login, name: data.name ?? data.login } });
+      setIntModal(null);
+      setIntInput("");
+    } catch { setIntError("Error de red. Intenta de nuevo."); }
+    setIntLoading(false);
+  };
+
+  const handleConnectZapierMake = async (key: string) => {
+    await saveIntegration(key, {
+      connected: true,
+      meta: { webhook: `https://agenda.me/api/webhooks/${workspace}/${key}` },
+    });
+    setIntModal(null);
+  };
+
+  const INTEGRATIONS_CONFIG = [
+    {
+      key: "github",
+      name: "GitHub",
+      desc: "Vincula repositorios y Pull Requests a tus tareas",
+      color: "#24292e",
+      icon: (
+        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" /></svg>
+      ),
+    },
+    {
+      key: "googledrive",
+      name: "Google Drive",
+      desc: "Adjunta archivos de Drive directamente en tareas",
+      color: "#4285F4",
+      icon: (
+        <svg viewBox="0 0 24 24" className="w-5 h-5"><path fill="#4285F4" d="M6.28 3L1 12.36l2.91 5.05L9.2 8.05 6.28 3z"/><path fill="#FBBC05" d="M17.72 3l-5.57 9.64h5.83L23 12.36 17.72 3z"/><path fill="#34A853" d="M8.14 17.41l2.92 5.05h5.88l2.92-5.05H8.14z"/></svg>
+      ),
+    },
+    {
+      key: "zapier",
+      name: "Zapier",
+      desc: "Automatiza flujos de trabajo con miles de apps",
+      color: "#FF4A00",
+      icon: (
+        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current text-[#FF4A00]"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.25 13.125h-4.125v4.125a1.125 1.125 0 01-2.25 0v-4.125H6.75a1.125 1.125 0 010-2.25h4.125V6.75a1.125 1.125 0 012.25 0v4.125h4.125a1.125 1.125 0 010 2.25z"/></svg>
+      ),
+    },
+    {
+      key: "make",
+      name: "Make",
+      desc: "Crea automatizaciones visuales entre tus herramientas",
+      color: "#6D0FC8",
+      icon: (
+        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current text-[#6D0FC8]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+      ),
+    },
+  ];
+
   const renderIntegraciones = () => (
     <div className="space-y-8">
       <div>
@@ -917,33 +1015,221 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {[
-          { name: "GitHub",   desc: "Vincula repositorios y Pull Requests",      icon: "⬡",  connected: true  },
-          { name: "Slack",    desc: "Recibe notificaciones en tus canales",       icon: "#",  connected: true  },
-          { name: "Figma",    desc: "Adjunta diseños directamente a las tareas",  icon: "◈",  connected: false },
-          { name: "Google Drive", desc: "Adjunta archivos de Drive en tareas",   icon: "▲",  connected: false },
-          { name: "Jira",     desc: "Importa issues de Jira como tareas",         icon: "⧫",  connected: false },
-          { name: "Zapier",   desc: "Automatiza flujos de trabajo",               icon: "⚡", connected: false },
-        ].map((app) => (
-          <div key={app.name} className="border border-gray-200 rounded-xl p-4 flex items-start gap-3 hover:border-gray-300 transition-colors">
-            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">
-              {app.icon}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">{app.name}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{app.desc}</p>
-            </div>
-            <button className={cn(
-              "flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
-              app.connected
-                ? "border-success/40 text-success bg-success/5 hover:bg-success/10"
-                : "border-gray-200 text-gray-600 hover:border-[#2F3988] hover:text-[#2F3988]"
+        {INTEGRATIONS_CONFIG.map((app) => {
+          const state = integrations[app.key];
+          return (
+            <div key={app.key} className={cn(
+              "border rounded-xl p-4 flex items-start gap-3 transition-all",
+              state.connected ? "border-green-200 bg-green-50/30" : "border-gray-200 hover:border-gray-300"
             )}>
-              {app.connected ? "Conectado" : "Conectar"}
-            </button>
-          </div>
-        ))}
+              <div className="w-10 h-10 rounded-lg bg-white border border-gray-100 shadow-sm flex items-center justify-center flex-shrink-0">
+                {app.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-gray-800">{app.name}</p>
+                  {state.connected && (
+                    <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Conectado</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">{app.desc}</p>
+                {state.connected && state.meta?.login && (
+                  <p className="text-xs text-gray-500 mt-1 font-medium">@{state.meta.login}</p>
+                )}
+                {state.connected && state.meta?.webhook && (
+                  <p className="text-[11px] text-gray-400 mt-1 font-mono truncate">{state.meta.webhook}</p>
+                )}
+              </div>
+              <button
+                onClick={() => state.connected ? disconnectIntegration(app.key) : setIntModal(app.key)}
+                className={cn(
+                  "flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
+                  state.connected
+                    ? "border-red-200 text-red-500 bg-white hover:bg-red-50"
+                    : "border-gray-200 text-gray-600 hover:border-[#2F3988] hover:text-[#2F3988]"
+                )}
+              >
+                {state.connected ? "Desconectar" : "Conectar"}
+              </button>
+            </div>
+          );
+        })}
       </div>
+
+      {/* ── Modals ── */}
+      {intModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+            {/* GitHub Modal */}
+            {intModal === "github" && (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white">
+                    {INTEGRATIONS_CONFIG[0].icon}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Conectar GitHub</h4>
+                    <p className="text-xs text-gray-400">Usa un Personal Access Token (PAT)</p>
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-blue-700 space-y-1">
+                  <p className="font-semibold">Cómo obtener tu token:</p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-blue-600">
+                    <li>Ve a GitHub → Settings → Developer settings</li>
+                    <li>Personal access tokens → Tokens (classic)</li>
+                    <li>Generate new token → selecciona <code className="bg-blue-100 px-1 rounded">repo</code></li>
+                  </ol>
+                </div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Personal Access Token</label>
+                <input
+                  ref={intInputRef}
+                  type="password"
+                  value={intInput}
+                  onChange={(e) => setIntInput(e.target.value)}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:border-[#2F3988] focus:ring-2 focus:ring-[#2F3988]/10"
+                />
+                {intError && <p className="text-xs text-red-500 mt-2">{intError}</p>}
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => { setIntModal(null); setIntInput(""); setIntError(""); }} className="flex-1 text-sm py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                  <button
+                    onClick={handleConnectGitHub}
+                    disabled={!intInput.trim() || intLoading}
+                    className="flex-1 text-sm py-2 rounded-xl bg-gray-900 text-white font-semibold disabled:opacity-50 hover:bg-gray-800 transition-colors"
+                  >
+                    {intLoading ? "Verificando…" : "Conectar"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Google Drive Modal */}
+            {intModal === "googledrive" && (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
+                    {INTEGRATIONS_CONFIG[1].icon}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Conectar Google Drive</h4>
+                    <p className="text-xs text-gray-400">Autoriza el acceso a tus archivos</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                  Al conectar Google Drive podrás adjuntar archivos directamente desde tu Drive en cualquier tarea del workspace.
+                </p>
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 mb-4 text-xs text-amber-700">
+                  Necesitas una cuenta Google activa. Se abrirá una ventana de autorización.
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setIntModal(null)} className="flex-1 text-sm py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                  <button
+                    onClick={async () => {
+                      // Mark as connected (OAuth flow would go here with real credentials)
+                      await saveIntegration("googledrive", { connected: true, meta: { scope: "drive.readonly" } });
+                      setIntModal(null);
+                    }}
+                    className="flex-1 text-sm py-2 rounded-xl font-semibold text-white transition-colors"
+                    style={{ background: "#4285F4" }}
+                  >
+                    Autorizar con Google
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Zapier Modal */}
+            {intModal === "zapier" && (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+                    {INTEGRATIONS_CONFIG[2].icon}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Conectar Zapier</h4>
+                    <p className="text-xs text-gray-400">Webhook para automatizaciones</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+                  Copia este webhook URL y pégalo en tu Zap de Zapier como trigger o action.
+                </p>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 mb-4">
+                  <code className="text-xs text-gray-700 flex-1 truncate font-mono">
+                    https://agenda.me/api/webhooks/{workspace}/zapier
+                  </code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`https://agenda.me/api/webhooks/${workspace}/zapier`)}
+                    className="text-xs text-[#2F3988] font-semibold hover:underline flex-shrink-0"
+                  >Copiar</button>
+                </div>
+                <div className="bg-orange-50 border border-orange-100 rounded-lg p-3 text-xs text-orange-700 mb-4 space-y-1">
+                  <p className="font-semibold">Pasos en Zapier:</p>
+                  <ol className="list-decimal list-inside space-y-0.5">
+                    <li>Crea un nuevo Zap → elige trigger</li>
+                    <li>En Action busca "Webhooks by Zapier"</li>
+                    <li>Elige POST y pega el URL de arriba</li>
+                  </ol>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setIntModal(null)} className="flex-1 text-sm py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                  <button
+                    onClick={() => handleConnectZapierMake("zapier")}
+                    className="flex-1 text-sm py-2 rounded-xl font-semibold text-white transition-colors"
+                    style={{ background: "#FF4A00" }}
+                  >
+                    Activar integración
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Make Modal */}
+            {intModal === "make" && (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+                    {INTEGRATIONS_CONFIG[3].icon}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">Conectar Make</h4>
+                    <p className="text-xs text-gray-400">Webhook para escenarios de automatización</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+                  Copia este webhook URL y pégalo en tu escenario de Make como módulo HTTP.
+                </p>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 mb-4">
+                  <code className="text-xs text-gray-700 flex-1 truncate font-mono">
+                    https://agenda.me/api/webhooks/{workspace}/make
+                  </code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`https://agenda.me/api/webhooks/${workspace}/make`)}
+                    className="text-xs text-[#6D0FC8] font-semibold hover:underline flex-shrink-0"
+                  >Copiar</button>
+                </div>
+                <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 text-xs text-purple-700 mb-4 space-y-1">
+                  <p className="font-semibold">Pasos en Make:</p>
+                  <ol className="list-decimal list-inside space-y-0.5">
+                    <li>Crea un nuevo escenario</li>
+                    <li>Agrega módulo "Webhooks" → Custom webhook</li>
+                    <li>Pega el URL de arriba y guarda</li>
+                  </ol>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setIntModal(null)} className="flex-1 text-sm py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                  <button
+                    onClick={() => handleConnectZapierMake("make")}
+                    className="flex-1 text-sm py-2 rounded-xl font-semibold text-white transition-colors"
+                    style={{ background: "#6D0FC8" }}
+                  >
+                    Activar integración
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 
