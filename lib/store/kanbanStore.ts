@@ -30,6 +30,7 @@ type KanbanState = {
   setLists: (updater: Updater<KanbanList[]>) => void;
   addTask: (listId: string, title: string, priority?: Priority) => void;
   moveTask: (taskId: string, newListId: string) => void;
+  updateTask: (taskId: string, changes: Partial<Task>) => void;
   setSearchQuery: (q: string) => void;
   setTaskFilters: (f: TaskFilters) => void;
   clearFilters: () => void;
@@ -45,6 +46,14 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
   setTaskFilters: (f) => set({ taskFilters: f }),
   clearFilters: () => set({ searchQuery: "", taskFilters: DEFAULT_FILTERS }),
+
+  updateTask: (taskId, changes) =>
+    set((s) => ({
+      lists: s.lists.map((list) => ({
+        ...list,
+        tasks: list.tasks.map((t) => t.id === taskId ? { ...t, ...changes } : t),
+      })),
+    })),
 
   setLists: (updater) =>
     set((s) => ({ lists: typeof updater === "function" ? updater(s.lists) : updater })),

@@ -224,6 +224,7 @@ export type Database = {
           is_completed: boolean;
           attachment_count: number;
           comment_count: number;
+          estimation: string | null;
           position: number;
           created_by: string;
           created_at: string;
@@ -239,6 +240,7 @@ export type Database = {
           is_completed?: boolean;
           attachment_count?: number;
           comment_count?: number;
+          estimation?: string | null;
           position?: number;
           created_by: string;
           created_at?: string;
@@ -253,6 +255,7 @@ export type Database = {
           is_completed?: boolean;
           attachment_count?: number;
           comment_count?: number;
+          estimation?: string | null;
           position?: number;
           updated_at?: string;
         };
@@ -310,6 +313,55 @@ export type Database = {
           title?: string;
           is_completed?: boolean;
           position?: number;
+        };
+        Relationships: [];
+      };
+      task_comments: {
+        Row: {
+          id: string;
+          task_id: string;
+          user_id: string;
+          body: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          user_id: string;
+          body: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          body?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      task_attachments: {
+        Row: {
+          id: string;
+          task_id: string;
+          created_by: string;
+          name: string;
+          size_bytes: number;
+          mime_type: string;
+          storage_path: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          created_by: string;
+          name: string;
+          size_bytes?: number;
+          mime_type?: string;
+          storage_path: string;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
         };
         Relationships: [];
       };

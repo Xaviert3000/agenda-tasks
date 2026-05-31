@@ -48,6 +48,7 @@ export async function updateTaskField(
     priority?: "low" | "med" | "high" | "urgent";
     due_date?: string | null;
     list_id?: string;
+    estimation?: string | null;
   }
 ): Promise<void> {
   if (!taskId || taskId.startsWith("temp-")) return;
@@ -141,4 +142,128 @@ export async function deleteSubtask(subtaskId: string): Promise<void> {
   if (!subtaskId || subtaskId.startsWith("s")) return; // skip mock IDs
   const supabase = await createClient();
   await supabase.from("subtasks").delete().eq("id", subtaskId);
+}
+
+/* ── Comments ── */
+
+export async function getTaskComments(taskId: string): Promise<
+  { id: string; userId: string; body: string; createdAt: string; author: { name: string; avatar: string } }[]
+> {
+  if (!taskId || taskId.startsWith("temp-")) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("task_comments")
+    .select("id, user_id, body, created_at, profiles(name, avatar_url)")
+    .eq("task_id", taskId)
+    .order("created_at");
+  if (!data) return [];
+  return data.map((c) => {
+    const p = Array.isArray(c.profiles) ? c.profiles[0] : c.profiles;
+    return {
+      id: c.id,
+      userId: c.user_id,
+      body: c.body,
+      createdAt: c.created_at,
+      author: {
+        name: p?.name ?? "Usuario",
+        avatar: p?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.user_id}`,
+      },
+    };
+  });
+}
+
+export async function addTaskComment(
+  taskId: string,
+  body: string
+): Promise<{ id: string; createdAt: string } | null> {
+  if (!taskId || taskId.startsWith("temp-")) return null;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("task_comments")
+    .insert({ task_id: taskId, user_id: user.id, body })
+    .select("id, created_at")
+    .single();
+  if (error || !data) return null;
+  return { id: data.id, createdAt: data.created_at };
+}
+
+export async function deleteTaskComment(commentId: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from("task_comments").delete().eq("id", commentId);
+}
+
+/* ── Attachments ── */
+
+export async function getTaskAttachments(taskId: string): Promise<
+  { id: string; name: string; sizeBytes: number; mimeType: string; storagePath: string; url: string | null }[]
+> {
+  if (!taskId || taskId.startsWith("temp-")) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("task_attachments")
+    .select("id, name, size_bytes, mime_type, storage_path")
+    .eq("task_id", taskId)
+    .order("created_at");
+  if (!data) return [];
+  return await Promise.all(
+    data.map(async (a) => {
+      const { data: signed } = await supabase.storage
+        .from("task-attachments")
+        .createSignedUrl(a.storage_path, 3600);
+      return {
+        id: a.id,
+        name: a.name,
+        sizeBytes: a.size_bytes,
+        mimeType: a.mime_type,
+        storagePath: a.storage_path,
+        url: signed?.signedUrl ?? null,
+      };
+    })
+  );
+}
+
+export async function uploadTaskAttachment(
+  taskId: string,
+  file: File
+): Promise<{ id: string; url: string | null } | null> {
+  if (!taskId || taskId.startsWith("temp-")) return null;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const ext = file.name.split(".").pop() ?? "bin";
+  const storagePath = `${taskId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("task-attachments")
+    .upload(storagePath, file, { contentType: file.type, upsert: false });
+  if (uploadError) return null;
+
+  const { data: record, error: dbError } = await supabase
+    .from("task_attachments")
+    .insert({
+      task_id: taskId,
+      created_by: user.id,
+      name: file.name,
+      size_bytes: file.size,
+      mime_type: file.type || "application/octet-stream",
+      storage_path: storagePath,
+    })
+    .select("id")
+    .single();
+  if (dbError || !record) return null;
+
+  const { data: signed } = await supabase.storage
+    .from("task-attachments")
+    .createSignedUrl(storagePath, 3600);
+
+  return { id: record.id, url: signed?.signedUrl ?? null };
+}
+
+export async function deleteTaskAttachment(attachmentId: string, storagePath: string): Promise<void> {
+  const supabase = await createClient();
+  await supabase.from("task_attachments").delete().eq("id", attachmentId);
+  await supabase.storage.from("task-attachments").remove([storagePath]);
 }

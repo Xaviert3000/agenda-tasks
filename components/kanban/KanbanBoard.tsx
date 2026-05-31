@@ -34,7 +34,11 @@ export function KanbanBoard({ initialLists, projectName, projectIcon, projectMem
   const { setLists, addTask, moveTask } = useKanbanStore();
   const displayLists = useFilteredLists(initialLists);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const selectedTask = selectedTaskId
+    ? displayLists.flatMap((l) => l.tasks).find((t) => t.id === selectedTaskId) ?? null
+    : null;
 
   useEffect(() => {
     setLists(initialLists);
@@ -147,11 +151,10 @@ export function KanbanBoard({ initialLists, projectName, projectIcon, projectMem
     }
   }, [setLists]);
 
-  const handleTaskClick    = useCallback((task: Task) => setSelectedTask(task), []);
-  const handleCloseDrawer  = useCallback(() => setSelectedTask(null), []);
+  const handleTaskClick    = useCallback((task: Task) => setSelectedTaskId(task.id), []);
+  const handleCloseDrawer  = useCallback(() => setSelectedTaskId(null), []);
   const handleStatusChange = useCallback((taskId: string, newListId: string) => {
     moveTask(taskId, newListId);
-    setSelectedTask((prev) => (prev?.id === taskId ? { ...prev, listId: newListId } : prev));
   }, [moveTask]);
 
   return (

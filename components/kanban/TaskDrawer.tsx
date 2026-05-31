@@ -9,8 +9,9 @@ import {
 } from "lucide-react";
 import type { Task, Priority, Assignee } from "@/types/domain";
 import { cn, PRIORITY_CONFIG } from "@/lib/utils";
-import { updateTaskField, setTaskAssignees, addTaskLabel, removeTaskLabel, createSubtask, toggleSubtask, deleteSubtask } from "@/app/actions/tasks";
+import { updateTaskField, setTaskAssignees, addTaskLabel, removeTaskLabel, createSubtask, toggleSubtask, deleteSubtask, getTaskComments, addTaskComment, deleteTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/app/actions/tasks";
 import { createClient } from "@/lib/supabase/client";
+import { useKanbanStore } from "@/lib/store/kanbanStore";
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -97,16 +98,16 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   type SubtaskAssignee = { id: string; name: string; avatar: string };
   type Subtask = { id: string; title: string; done: boolean; assignee?: SubtaskAssignee | null };
 
+  type Comment = { id: string; userId?: string; body: string; createdAt?: string; time: string; author: { name: string; avatar: string } };
+
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
-  const [comments, setComments] = useState(
-    (task?.commentCount ?? 0) > 0 ? MOCK_COMMENTS : []
-  );
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newSubtask, setNewSubtask] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskPop, setSubtaskPop] = useState<string | null>(null);
 
   /* attachments */
-  type AttachFile = { id: string; name: string; size: string; type: string; url: string | null };
+  type AttachFile = { id: string; name: string; size: string; type: string; url: string | null; storagePath?: string; uploading?: boolean };
   const [files, setFiles] = useState<AttachFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -149,17 +150,32 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   /* ── persist helpers ── */
   const taskId = task?.id ?? "";
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const updateTaskInStore = useKanbanStore((s) => s.updateTask);
 
   const saveField = useCallback((fields: Parameters<typeof updateTaskField>[1]) => {
     if (!taskId || taskId.startsWith("temp-")) return;
     updateTaskField(taskId, fields);
-  }, [taskId]);
+    // Sync store so drawer shows fresh data on reopen
+    const storeChanges: Partial<Task> = {};
+    if (fields.title !== undefined) storeChanges.title = fields.title;
+    if (fields.description !== undefined) storeChanges.description = fields.description;
+    if (fields.priority !== undefined) storeChanges.priority = fields.priority;
+    if (fields.due_date !== undefined) storeChanges.dueDate = fields.due_date ?? undefined;
+    if (fields.list_id !== undefined) storeChanges.listId = fields.list_id;
+    if (Object.keys(storeChanges).length > 0) updateTaskInStore(taskId, storeChanges);
+  }, [taskId, updateTaskInStore]);
 
   const saveDebounced = useCallback((fields: Parameters<typeof updateTaskField>[1], ms = 600) => {
     if (!taskId || taskId.startsWith("temp-")) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => updateTaskField(taskId, fields), ms);
-  }, [taskId]);
+    debounceRef.current = setTimeout(() => {
+      updateTaskField(taskId, fields);
+      const storeChanges: Partial<Task> = {};
+      if (fields.title !== undefined) storeChanges.title = fields.title;
+      if (fields.description !== undefined) storeChanges.description = fields.description;
+      if (Object.keys(storeChanges).length > 0) updateTaskInStore(taskId, storeChanges);
+    }, ms);
+  }, [taskId, updateTaskInStore]);
 
   /* popovers */
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -173,12 +189,12 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
     setLabels(task?.labels ?? []);
     setDueDate(task?.dueDate ? task.dueDate.split("T")[0] : "");
     setTaskPriority(task?.priority ?? "med");
-    setEstimation("");
+    setEstimation((task as (typeof task & { estimation?: string | null }))?.estimation ?? "");
     setOpenPop(null);
     setFiles([]);
     setSubtasks([]);
     setLabels([]);
-    setComments((task?.commentCount ?? 0) > 0 ? MOCK_COMMENTS : []);
+    setComments([]);
     setNewSubtask("");
     setAddingSubtask(false);
     setSubtaskPop(null);
@@ -186,12 +202,12 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
     setNewLabelName("");
   }, [task?.id]);
 
-  /* Load subtasks + labels from Supabase when task opens */
+  /* Load subtasks + labels + comments + attachments + estimation from Supabase when task opens */
   useEffect(() => {
     if (!task?.id || task.id.startsWith("temp-")) return;
     const supabase = createClient();
     (async () => {
-      const [{ data: subs }, { data: taskLbls }] = await Promise.all([
+      const [{ data: subs }, { data: taskLbls }, { data: taskRow }, commentsData, attachmentsData] = await Promise.all([
         supabase
           .from("subtasks")
           .select("id, title, is_completed")
@@ -201,6 +217,13 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
           .from("task_labels")
           .select("label_id, labels(id, name, light_color, solid_color)")
           .eq("task_id", task.id),
+        supabase
+          .from("tasks")
+          .select("estimation")
+          .eq("id", task.id)
+          .single(),
+        getTaskComments(task.id),
+        getTaskAttachments(task.id),
       ]);
 
       if (subs) {
@@ -214,13 +237,33 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
           })
           .filter((l): l is { id: string; name: string; light: string; solid: string } => l !== null);
         setLabels(mapped);
-        // Merge into allLabels so they appear in the picker
         setAllLabels((prev) => {
           const ids = new Set(prev.map((l) => l.id));
           const newOnes = mapped.filter((l) => !ids.has(l.id));
           return [...prev, ...newOnes];
         });
       }
+      if (taskRow?.estimation) {
+        setEstimation(taskRow.estimation);
+      }
+      setComments(commentsData.map((c) => ({
+        id: c.id,
+        userId: c.userId,
+        body: c.body,
+        createdAt: c.createdAt,
+        time: new Date(c.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        author: c.author,
+      })));
+      setFiles(attachmentsData.map((a) => ({
+        id: a.id,
+        name: a.name,
+        size: a.sizeBytes < 1024 * 1024
+          ? `${(a.sizeBytes / 1024).toFixed(0)} KB`
+          : `${(a.sizeBytes / (1024 * 1024)).toFixed(1)} MB`,
+        type: a.mimeType,
+        url: a.url,
+        storagePath: a.storagePath,
+      })));
     })();
   }, [task?.id]);
 
@@ -234,16 +277,33 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
   /* file helpers */
   const addRawFiles = (rawFiles: FileList | null) => {
     if (!rawFiles) return;
-    const newEntries: typeof files = Array.from(rawFiles).map((f) => ({
-      id: `f${Date.now()}-${Math.random()}`,
-      name: f.name,
-      size: f.size < 1024 * 1024
-        ? `${(f.size / 1024).toFixed(0)} KB`
-        : `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
-      type: f.type || "other",
-      url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null,
-    }));
-    setFiles((p) => [...p, ...newEntries]);
+    Array.from(rawFiles).forEach((f) => {
+      const tempId = `uploading-${Date.now()}-${Math.random()}`;
+      const preview: typeof files[0] = {
+        id: tempId,
+        name: f.name,
+        size: f.size < 1024 * 1024
+          ? `${(f.size / 1024).toFixed(0)} KB`
+          : `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
+        type: f.type || "application/octet-stream",
+        url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null,
+        uploading: true,
+      };
+      setFiles((p) => [...p, preview]);
+      uploadTaskAttachment(taskId, f).then((res) => {
+        if (!res) {
+          setFiles((p) => p.filter((x) => x.id !== tempId));
+          return;
+        }
+        setFiles((p) =>
+          p.map((x) =>
+            x.id === tempId
+              ? { ...x, id: res.id, url: res.url ?? x.url, uploading: false }
+              : x
+          )
+        );
+      });
+    });
   };
 
   const fileIcon = (type: string) => {
@@ -300,16 +360,22 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
 
   const submitComment = () => {
     if (!comment.trim()) return;
+    const body = comment.trim();
+    const tempId = `temp-c${Date.now()}`;
     setComments((prev) => [
       ...prev,
       {
-        id: `c${Date.now()}`,
-        author: { name: "Tú", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4" },
-        body: comment.trim(),
+        id: tempId,
+        body,
         time: "Ahora",
+        author: { name: "Tú", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4" },
       },
     ]);
     setComment("");
+    addTaskComment(taskId, body).then((res) => {
+      if (!res) return;
+      setComments((prev) => prev.map((c) => c.id === tempId ? { ...c, id: res.id, createdAt: res.createdAt } : c));
+    });
   };
 
   const formatDisplayDate = (d: string) => {
@@ -704,7 +770,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-800 truncate">{file.name}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{file.size}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{file.uploading ? "Subiendo…" : file.size}</p>
                       </div>
 
                       {/* Actions — visible on hover */}
@@ -724,7 +790,12 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                           <Download className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setFiles((p) => p.filter((f) => f.id !== file.id))}
+                          onClick={() => {
+                            setFiles((p) => p.filter((f) => f.id !== file.id));
+                            if (file.storagePath && !file.id.startsWith("uploading-")) {
+                              deleteTaskAttachment(file.id, file.storagePath);
+                            }
+                          }}
                           title="Eliminar"
                           className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-danger transition-colors"
                         >
@@ -874,7 +945,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                 {labels.map((label) => (
                   <button
                     key={label.id}
-                    onClick={() => setLabels((p) => p.filter((l) => l.id !== label.id))}
+                    onClick={() => { setLabels((p) => p.filter((l) => l.id !== label.id)); removeTaskLabel(taskId, label.id); }}
                     className="text-[11px] font-medium px-2 py-0.5 rounded flex items-center gap-1 group"
                     style={{ background: label.light, color: label.solid }}
                     title="Clic para quitar"
@@ -974,7 +1045,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                     {["30m", "1h", "2h", "4h", "8h", "1d", "3d"].map((t) => (
                       <button
                         key={t}
-                        onClick={() => { setEstimation(t); setOpenPop(null); }}
+                        onClick={() => { setEstimation(t); setOpenPop(null); saveField({ estimation: t }); }}
                         className={cn(
                           "px-2.5 py-1 rounded text-xs font-medium border transition-colors",
                           estimation === t
@@ -996,7 +1067,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                       onKeyDown={(e) => { if (e.key === "Enter") setOpenPop(null); }}
                     />
                     <button
-                      onClick={() => setOpenPop(null)}
+                      onClick={() => { setOpenPop(null); saveField({ estimation: estimation || null }); }}
                       className="px-2.5 py-1.5 text-xs font-medium text-white rounded-lg transition-colors"
                       style={{ background: "#2F3988" }}
                     >
@@ -1004,7 +1075,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                     </button>
                   </div>
                   {estimation && (
-                    <button onClick={() => { setEstimation(""); setOpenPop(null); }} className="text-[11px] text-gray-400 hover:text-danger mt-2 transition-colors">
+                    <button onClick={() => { setEstimation(""); setOpenPop(null); saveField({ estimation: null }); }} className="text-[11px] text-gray-400 hover:text-danger mt-2 transition-colors">
                       Quitar estimación
                     </button>
                   )}
