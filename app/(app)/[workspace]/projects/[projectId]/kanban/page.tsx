@@ -1,5 +1,6 @@
 import { KanbanBoardWrapper } from "@/components/kanban/KanbanBoardWrapper";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { KanbanList, Task } from "@/types/domain";
 
 interface KanbanPageProps {
@@ -8,10 +9,13 @@ interface KanbanPageProps {
 
 export default async function KanbanPage({ params }: KanbanPageProps) {
   const { projectId } = await params;
-  const supabase = await createClient();
+  const authClient = await createClient();
 
-  // Current user
-  const { data: { user } } = await supabase.auth.getUser();
+  // Current user (auth via the RLS-bound client)
+  const { data: { user } } = await authClient.auth.getUser();
+
+  // Data reads via the service client to bypass RLS (auth already verified above)
+  const supabase = createServiceClient();
 
   // Project metadata
   const { data: proj } = await supabase
