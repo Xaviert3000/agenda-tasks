@@ -6,10 +6,14 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  // Parse as local date (avoid UTC-midnight timezone shift)
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+
   const now = new Date();
-  const diff = date.getTime() - now.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const days = Math.round((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
   if (days < 0) return `Vencida hace ${Math.abs(days)}d`;
   if (days === 0) return "Vence hoy";
