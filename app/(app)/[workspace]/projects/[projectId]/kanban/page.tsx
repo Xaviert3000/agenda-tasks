@@ -91,13 +91,18 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
 
   const initialLists: KanbanList[] = lists;
 
-  // Workspace members as assignee options
+  // Workspace members as assignee options (always include current user)
   let projectMembers: { id: string; name: string; avatar: string }[] = [];
   if (proj?.workspace_id) {
-    const { data: members } = await supabase
-      .from("workspace_members")
-      .select("user_id, profiles(id, name, avatar_url)")
-      .eq("workspace_id", proj.workspace_id);
+    const [{ data: members }, { data: myProfile }] = await Promise.all([
+      supabase
+        .from("workspace_members")
+        .select("user_id, profiles(id, name, avatar_url)")
+        .eq("workspace_id", proj.workspace_id),
+      user
+        ? supabase.from("profiles").select("id, name, avatar_url").eq("id", user.id).single()
+        : Promise.resolve({ data: null }),
+    ]);
 
     const mapped = (members ?? [])
       .map((m) => {
@@ -107,6 +112,16 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
           : null;
       })
       .filter((m): m is { id: string; name: string; avatar: string } => m !== null);
+
+    // Ensure current user is always present (workspace creator may not be in workspace_members)
+    const meInList = mapped.find((m) => m.id === user?.id);
+    if (!meInList && myProfile && user) {
+      mapped.unshift({
+        id: user.id,
+        name: myProfile.name,
+        avatar: myProfile.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+      });
+    }
 
     const me = mapped.find((m) => m.id === user?.id);
     const others = mapped.filter((m) => m.id !== user?.id);
