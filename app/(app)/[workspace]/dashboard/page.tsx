@@ -137,7 +137,7 @@ export default async function DashboardPage({ params }: Props) {
   const sidebarListIds = (sidebarLists ?? []).map((l) => l.id);
 
   const { data: columns } = sidebarListIds.length
-    ? await supabase.from("kanban_columns").select("id").in("list_id", sidebarListIds)
+    ? await supabase.from("kanban_columns").select("id, color").in("list_id", sidebarListIds)
     : { data: [] };
 
   const columnIds = (columns ?? []).map((c) => c.id);
@@ -192,7 +192,7 @@ export default async function DashboardPage({ params }: Props) {
     { label: "Vencidas", value: overdueTasks, icon: AlertCircle, color: "#EF4444", bg: "#FEE2E2" },
   ];
 
-  const listMap = Object.fromEntries((lists ?? []).map((l) => [l.id, l]));
+  const listMap = Object.fromEntries((columns ?? []).map((c) => [c.id, c]));
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-gray-50">
