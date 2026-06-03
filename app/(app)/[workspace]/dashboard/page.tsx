@@ -128,20 +128,26 @@ export default async function DashboardPage({ params }: Props) {
 
   const projectIds = projects.map((p) => p.id);
 
-  // Fetch kanban lists for all projects
-  const { data: lists } = await supabase
+  // Fetch sidebar lists for all projects, then their columns
+  const { data: sidebarLists } = await supabase
     .from("kanban_lists")
-    .select("id, name, color, project_id")
+    .select("id")
     .in("project_id", projectIds);
 
-  const listIds = (lists ?? []).map((l) => l.id);
+  const sidebarListIds = (sidebarLists ?? []).map((l) => l.id);
+
+  const { data: columns } = sidebarListIds.length
+    ? await supabase.from("kanban_columns").select("id").in("list_id", sidebarListIds)
+    : { data: [] };
+
+  const columnIds = (columns ?? []).map((c) => c.id);
 
   // Fetch tasks
-  const { data: tasks } = listIds.length
+  const { data: tasks } = columnIds.length
     ? await supabase
         .from("tasks")
         .select("id, title, list_id, is_completed, due_date, attachment_count, comment_count")
-        .in("list_id", listIds)
+        .in("list_id", columnIds)
     : { data: [] };
 
   const allTasks = tasks ?? [];

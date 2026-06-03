@@ -215,13 +215,6 @@ export function Sidebar({ workspace }: SidebarProps) {
         .single();
       if (!newProject) return;
 
-      // Create default kanban lists
-      await supabase.from("kanban_lists").insert([
-        { project_id: newProject.id, name: "Por Hacer",   color: "#EF4444", position: 0 },
-        { project_id: newProject.id, name: "En Progreso", color: "#3B82F6", position: 1 },
-        { project_id: newProject.id, name: "En Revisión", color: "#F59E0B", position: 2 },
-        { project_id: newProject.id, name: "Completado",  color: "#22C55E", position: 3 },
-      ]);
 
       // Add creator as project member
       await supabase.from("project_members").insert({
@@ -253,12 +246,20 @@ export function Sidebar({ workspace }: SidebarProps) {
           project_id: creating.projectId,
           folder_id: creating.folderId ?? null,
           name,
-          color: "#6B7280",
           position: 99,
         })
         .select("id")
         .single();
-      if (newList) await loadProjects();
+      if (newList) {
+        // Create default kanban columns for this list
+        await supabase.from("kanban_columns").insert([
+          { list_id: newList.id, name: "Por Hacer",   color: "#EF4444", position: 0 },
+          { list_id: newList.id, name: "En Progreso", color: "#3B82F6", position: 1 },
+          { list_id: newList.id, name: "En Revisión", color: "#F59E0B", position: 2 },
+          { list_id: newList.id, name: "Completado",  color: "#22C55E", position: 3 },
+        ]);
+        await loadProjects();
+      }
     }
 
     setCreating(null);

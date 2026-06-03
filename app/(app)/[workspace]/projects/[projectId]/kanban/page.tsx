@@ -24,31 +24,47 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
     .eq("id", projectId)
     .single();
 
-  // Kanban lists for this project
-  const { data: rawLists } = await supabase
-    .from("kanban_lists")
+  // Kanban columns for this list (projectId param is actually the sidebar list ID)
+  const { data: rawColumns } = await supabase
+    .from("kanban_columns")
     .select("id, name, color, wip_limit, position")
-    .eq("project_id", projectId)
+    .eq("list_id", projectId)
     .order("position");
 
-  // Tasks for all lists
-  const listIds = (rawLists ?? []).map((l) => l.id);
-  const { data: rawTasks } = listIds.length
+  // If no columns yet, create the 4 defaults for this list
+  let columns = rawColumns ?? [];
+  if (columns.length === 0 && projectId) {
+    const defaults = [
+      { name: "Por Hacer",   color: "#EF4444", position: 0 },
+      { name: "En Progreso", color: "#3B82F6", position: 1 },
+      { name: "En Revisión", color: "#F59E0B", position: 2 },
+      { name: "Completado",  color: "#22C55E", position: 3 },
+    ];
+    const { data: created } = await supabase
+      .from("kanban_columns")
+      .insert(defaults.map((d) => ({ ...d, list_id: projectId })))
+      .select("id, name, color, wip_limit, position");
+    columns = created ?? [];
+  }
+
+  // Tasks for all columns
+  const columnIds = columns.map((c) => c.id);
+  const { data: rawTasks } = columnIds.length
     ? await supabase
         .from("tasks")
         .select("id, list_id, title, description, priority, due_date, is_completed, attachment_count, comment_count, position")
-        .in("list_id", listIds)
+        .in("list_id", columnIds)
         .order("position")
     : { data: [] };
 
   // Build domain KanbanList[]
-  const lists: KanbanList[] = (rawLists ?? []).map((l) => ({
-    id: l.id,
-    name: l.name,
-    color: l.color,
-    wipLimit: l.wip_limit ?? undefined,
+  const lists: KanbanList[] = columns.map((c) => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+    wipLimit: c.wip_limit ?? undefined,
     tasks: (rawTasks ?? [])
-      .filter((t) => t.list_id === l.id)
+      .filter((t) => t.list_id === c.id)
       .map((t): Task => ({
         id: t.id,
         title: t.title,
@@ -61,34 +77,11 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
         commentCount: t.comment_count ?? 0,
         dueDate: t.due_date ?? undefined,
         isCompleted: t.is_completed,
-        listId: l.id,
+        listId: c.id,
       })),
   }));
 
-  // If no lists exist yet, create the 4 default ones in Supabase
-  if (lists.length === 0 && projectId) {
-    const defaults = [
-      { name: "Por Hacer",  color: "#EF4444", position: 0 },
-      { name: "En Progreso", color: "#3B82F6", position: 1 },
-      { name: "En Revisión", color: "#F59E0B", position: 2 },
-      { name: "Completado",  color: "#22C55E", position: 3 },
-    ];
-    const { data: created } = await supabase
-      .from("kanban_lists")
-      .insert(defaults.map((d) => ({ ...d, project_id: projectId })))
-      .select("id, name, color, position");
-
-    if (created) {
-      lists.push(...created.map((l) => ({ id: l.id, name: l.name, color: l.color, tasks: [] })));
-    }
-  }
-
-  const initialLists: KanbanList[] = lists.length > 0 ? lists : [
-    { id: "todo",        name: "Por Hacer",   color: "#EF4444", tasks: [] },
-    { id: "in-progress", name: "En Progreso",  color: "#3B82F6", tasks: [] },
-    { id: "review",      name: "En Revisión",  color: "#F59E0B", tasks: [] },
-    { id: "done",        name: "Completado",   color: "#22C55E", tasks: [] },
-  ];
+  const initialLists: KanbanList[] = lists;
 
   // Workspace members as assignee options
   let projectMembers: { id: string; name: string; avatar: string }[] = [];

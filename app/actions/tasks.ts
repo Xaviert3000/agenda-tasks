@@ -75,7 +75,9 @@ export async function setTaskAssignees(taskId: string, userIds: string[]): Promi
 async function getWorkspaceIdForTask(supabase: ReturnType<typeof createServiceClient>, taskId: string): Promise<string | null> {
   const { data: task } = await supabase.from("tasks").select("list_id").eq("id", taskId).single();
   if (!task) return null;
-  const { data: list } = await supabase.from("kanban_lists").select("project_id").eq("id", task.list_id).single();
+  const { data: col } = await supabase.from("kanban_columns").select("list_id").eq("id", task.list_id).single();
+  if (!col) return null;
+  const { data: list } = await supabase.from("kanban_lists").select("project_id").eq("id", col.list_id).single();
   if (!list) return null;
   const { data: proj } = await supabase.from("projects").select("workspace_id").eq("id", list.project_id).single();
   return proj?.workspace_id ?? null;
