@@ -17,12 +17,20 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
   // Data reads via the service client to bypass RLS (auth already verified above)
   const supabase = createServiceClient();
 
-  // Project metadata
-  const { data: proj } = await supabase
-    .from("projects")
-    .select("name, icon, workspace_id")
+  // projectId param is the sidebar list ID — look up the project through kanban_lists
+  const { data: listRow } = await supabase
+    .from("kanban_lists")
+    .select("project_id")
     .eq("id", projectId)
     .single();
+
+  const { data: proj } = listRow
+    ? await supabase
+        .from("projects")
+        .select("name, icon, workspace_id")
+        .eq("id", listRow.project_id)
+        .single()
+    : { data: null };
 
   // Kanban columns for this list (projectId param is actually the sidebar list ID)
   const { data: rawColumns } = await supabase
