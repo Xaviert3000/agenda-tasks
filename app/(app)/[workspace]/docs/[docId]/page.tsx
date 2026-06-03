@@ -346,10 +346,14 @@ export default function DocEditorPage() {
   const triggerSave = useCallback(() => {
     setSaved(false);
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
+    saveTimer.current = setTimeout(async () => {
       const content = editorRef.current?.innerHTML ?? "";
-      updateDoc(docId, { title: titleRef.current, content, icon: iconRef.current });
-      setSaved(true);
+      try {
+        await updateDoc(docId, { title: titleRef.current, content, icon: iconRef.current });
+        setSaved(true);
+      } catch {
+        // leave setSaved(false) so the user sees it's not saved
+      }
     }, 700);
   }, [docId, updateDoc]);
 
@@ -395,35 +399,35 @@ export default function DocEditorPage() {
     if (!file) return;
     e.target.value = "";
 
-    const supabase = createClient();
-    const path = `${docId}/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
-
-    // Show placeholder while uploading
-    const placeholderId = `img-placeholder-${Date.now()}`;
+    // Show local preview immediately — no waiting for upload
+    const localUrl = URL.createObjectURL(file);
+    const imgId = `doc-img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     insertHtmlAtCursor(
-      `<p id="${placeholderId}" style="color:#9CA3AF;font-size:13px">⏳ Subiendo imagen...</p>`
+      `<figure style="margin:16px 0;display:block;"><img id="${imgId}" src="${localUrl}" alt="${file.name}" style="width:100%;max-width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.08);display:block;cursor:pointer;opacity:0.6;" data-doc-img="true" /><p><br></p></figure>`
     );
 
+    // Upload compressed version in background
+    const supabase = createClient();
+    const path = `${docId}/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
     const compressed = await compressImage(file);
-    const { error } = await supabase.storage.from("doc-images").upload(path, compressed, { contentType: "image/webp" });
-    const placeholder = document.getElementById(placeholderId);
+    const { error, data: uploadData } = await supabase.storage.from("doc-images").upload(path, compressed, { contentType: "image/webp" });
 
-    if (error || !placeholder) {
-      placeholder?.remove();
+    URL.revokeObjectURL(localUrl);
+    const imgEl = document.getElementById(imgId) as HTMLImageElement | null;
+
+    if (error || !imgEl) {
+      imgEl?.closest("figure")?.remove();
       return;
     }
 
     const { data: { publicUrl } } = supabase.storage.from("doc-images").getPublicUrl(path);
-    const figure = document.createElement("figure");
-    figure.style.cssText = "margin:16px 0;display:block;";
-    figure.innerHTML = `<img src="${publicUrl}" alt="${file.name}" style="width:100%;max-width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.08);display:block;cursor:pointer;" data-doc-img="true" /><p><br></p>`;
-    placeholder.replaceWith(figure);
+    imgEl.src = publicUrl;
+    imgEl.style.opacity = "1";
+    imgEl.removeAttribute("id");
 
-    // Trigger save
-    if (editorRef.current) {
-      editorRef.current.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  }, [docId, insertHtmlAtCursor]);
+    // Save with the permanent URL
+    triggerSave();
+  }, [docId, insertHtmlAtCursor, triggerSave]);
 
   const handleAttachFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
