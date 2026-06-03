@@ -89,9 +89,16 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
 
     // Persist to Supabase and replace temp ID with real one
     createTaskAction(listId, title, priority).then((result) => {
-      if (!result) return;
-      if ("error" in result) {
-        console.error("[kanban] createTask failed:", result.error, "listId:", listId);
+      if (!result || "error" in result) {
+        console.error("[kanban] createTask failed:", result, "listId:", listId);
+        // Remove the optimistic task so the UI stays consistent
+        set((s) => ({
+          lists: s.lists.map((list) =>
+            list.id !== listId
+              ? list
+              : { ...list, tasks: list.tasks.filter((t) => t.id !== tempId) }
+          ),
+        }));
         return;
       }
       set((s) => ({
