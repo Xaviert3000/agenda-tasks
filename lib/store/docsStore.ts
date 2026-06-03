@@ -80,6 +80,7 @@ interface DocsState {
   docs: Doc[];
   folders: DocFolder[];
   workspaceId: string | undefined;
+  workspaceSlug: string | undefined;
   loadDocs: (workspaceSlug: string) => Promise<void>;
   addDoc: (folderId?: string) => Promise<string>;
   addFolder: (name: string) => Promise<string>;
@@ -97,6 +98,7 @@ export const useDocsStore = create<DocsState>((set, get) => ({
   docs: [],
   folders: [],
   workspaceId: undefined,
+  workspaceSlug: undefined,
 
   loadDocs: async (workspaceSlug: string) => {
     const supabase = createClient();
@@ -111,7 +113,7 @@ export const useDocsStore = create<DocsState>((set, get) => ({
     if (!ws) return;
     const workspaceId = ws.id;
 
-    set({ workspaceId });
+    set({ workspaceId, workspaceSlug });
 
     // Load folders
     const { data: rawFolders } = await supabase
@@ -205,26 +207,24 @@ export const useDocsStore = create<DocsState>((set, get) => ({
 
   addDoc: async (folderId) => {
     const supabase = createClient();
-    const { workspaceId } = get();
+    let { workspaceId, workspaceSlug } = get();
     const { data: { user } } = await supabase.auth.getUser();
 
+    // If workspaceId isn't loaded yet, resolve it from Supabase using the stored slug
+    if (!workspaceId && workspaceSlug) {
+      const { data: ws } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("slug", workspaceSlug)
+        .single();
+      if (ws) {
+        workspaceId = ws.id;
+        set({ workspaceId });
+      }
+    }
+
     if (!workspaceId || !user) {
-      // Fallback: local only
-      const id = `doc-${Date.now()}`;
-      const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
-      const newDoc: Doc = {
-        id,
-        title: "Sin título",
-        content: "<p>Empieza a escribir aquí...</p>",
-        icon: "📄",
-        folderId,
-        createdAt: today,
-        updatedAt: today,
-        tags: [],
-        comments: [],
-      };
-      set((s) => ({ docs: [...s.docs, newDoc] }));
-      return id;
+      throw new Error("Workspace no disponible. Intenta recargar la página.");
     }
 
     const { data, error } = await supabase
@@ -296,10 +296,14 @@ export const useDocsStore = create<DocsState>((set, get) => ({
       ),
     }));
 
-    await supabase
+    const { error } = await supabase
       .from("documents")
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id);
+    if (error) {
+      console.error("[updateDoc] Supabase error:", error);
+      throw error;
+    }
   },
 
   updateDocTags: async (id, tags) => {
