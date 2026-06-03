@@ -138,7 +138,7 @@ export default async function DashboardPage({ params }: Props) {
 
   const { data: columns } = sidebarListIds.length
     ? await supabase.from("kanban_columns").select("id, color, list_id").in("list_id", sidebarListIds)
-    : { data: [] };
+    : { data: [] as { id: string; color: string; list_id: string }[] };
 
   const columnIds = (columns ?? []).map((c) => c.id);
 

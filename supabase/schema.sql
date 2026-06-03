@@ -246,6 +246,10 @@ insert into storage.buckets (id, name, public)
 values ('doc-images', 'doc-images', true)
 on conflict (id) do nothing;
 
+insert into storage.buckets (id, name, public)
+values ('task-attachments', 'task-attachments', true)
+on conflict (id) do nothing;
+
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================
@@ -397,6 +401,11 @@ create policy "messages_insert" on messages for insert with check (sender_id = a
 create policy "doc_images_select" on storage.objects for select using (bucket_id = 'doc-images');
 create policy "doc_images_insert" on storage.objects for insert with check (bucket_id = 'doc-images' and auth.role() = 'authenticated');
 create policy "doc_images_delete" on storage.objects for delete using (bucket_id = 'doc-images' and owner = auth.uid());
+
+-- Storage: task-attachments
+create policy "task_att_select" on storage.objects for select using (bucket_id = 'task-attachments');
+create policy "task_att_insert" on storage.objects for insert with check (bucket_id = 'task-attachments' and auth.role() = 'authenticated');
+create policy "task_att_delete" on storage.objects for delete using (bucket_id = 'task-attachments' and owner = auth.uid());
 
 -- ============================================================
 -- ÍNDICES

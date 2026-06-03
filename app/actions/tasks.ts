@@ -213,21 +213,19 @@ export async function getTaskAttachments(taskId: string): Promise<
     .eq("task_id", taskId)
     .order("created_at");
   if (!data) return [];
-  return await Promise.all(
-    data.map(async (a) => {
-      const { data: signed } = await supabase.storage
-        .from("task-attachments")
-        .createSignedUrl(a.storage_path, 3600);
-      return {
-        id: a.id,
-        name: a.name,
-        sizeBytes: a.size_bytes,
-        mimeType: a.mime_type,
-        storagePath: a.storage_path,
-        url: signed?.signedUrl ?? null,
-      };
-    })
-  );
+  return data.map((a) => {
+    const { data: { publicUrl } } = supabase.storage
+      .from("task-attachments")
+      .getPublicUrl(a.storage_path);
+    return {
+      id: a.id,
+      name: a.name,
+      sizeBytes: a.size_bytes,
+      mimeType: a.mime_type,
+      storagePath: a.storage_path,
+      url: publicUrl ?? null,
+    };
+  });
 }
 
 export async function uploadTaskAttachment(
@@ -262,11 +260,11 @@ export async function uploadTaskAttachment(
     .single();
   if (dbError || !record) return null;
 
-  const { data: signed } = await supabase.storage
+  const { data: { publicUrl } } = supabase.storage
     .from("task-attachments")
-    .createSignedUrl(storagePath, 3600);
+    .getPublicUrl(storagePath);
 
-  return { id: record.id, url: signed?.signedUrl ?? null };
+  return { id: record.id, url: publicUrl ?? null };
 }
 
 export async function deleteTaskAttachment(attachmentId: string, storagePath: string): Promise<void> {
