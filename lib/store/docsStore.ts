@@ -128,33 +128,47 @@ export const useDocsStore = create<DocsState>((set, get) => ({
       icon: f.icon,
     }));
 
-    // Load docs with comments
-    const { data: rawDocs } = await supabase
+    // Load docs (without nested profile join — no FK declared between comments and profiles)
+    const { data: rawDocs, error: docsError } = await supabase
       .from("documents")
-      .select(`
-        id, title, content, icon, folder_id, tags, created_at, updated_at,
-        document_comments(id, author_id, text, resolved, created_at, profiles(name, avatar_url))
-      `)
+      .select("id, title, content, icon, folder_id, tags, created_at, updated_at")
       .eq("workspace_id", workspaceId)
       .order("created_at");
 
+    if (docsError) console.error("[loadDocs] documents error:", docsError);
+
+    // Load comments separately
+    const docIds = (rawDocs ?? []).map((d) => d.id);
+    const { data: rawComments } = docIds.length > 0
+      ? await supabase
+          .from("document_comments")
+          .select("id, doc_id, author_id, text, resolved, created_at")
+          .in("doc_id", docIds)
+      : { data: [] };
+
+    // Load commenter profiles
+    const commenterIds = [...new Set((rawComments ?? []).map((c) => c.author_id))];
+    const { data: commenterProfiles } = commenterIds.length > 0
+      ? await supabase.from("profiles").select("id, name, avatar_url").in("id", commenterIds)
+      : { data: [] };
+    const profileMap = new Map((commenterProfiles ?? []).map((p) => [p.id, p]));
+
     const docs: Doc[] = (rawDocs ?? []).map((d) => {
-      type RawComment = {
-        id: string;
-        author_id: string;
-        text: string;
-        resolved: boolean;
-        created_at: string;
-        profiles: { name: string; avatar_url: string | null } | null;
-      };
-      const comments: DocComment[] = ((d.document_comments as unknown as RawComment[]) ?? []).map((c) => ({
-        id: c.id,
-        author: c.profiles?.name ?? "Usuario",
-        avatar: c.profiles?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.author_id}`,
-        text: c.text,
-        createdAt: fmtDate(c.created_at),
-        resolved: c.resolved,
-      }));
+      const comments: DocComment[] = ((rawComments ?? []) as Array<{
+        id: string; doc_id: string; author_id: string; text: string; resolved: boolean; created_at: string;
+      }>)
+        .filter((c) => c.doc_id === d.id)
+        .map((c) => {
+          const p = profileMap.get(c.author_id);
+          return {
+            id: c.id,
+            author: p?.name ?? "Usuario",
+            avatar: p?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.author_id}`,
+            text: c.text,
+            createdAt: fmtDate(c.created_at),
+            resolved: c.resolved,
+          };
+        });
 
       return {
         id: d.id,
