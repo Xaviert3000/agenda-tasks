@@ -5,7 +5,7 @@ import {
   X, ChevronDown, Paperclip, MessageSquare, CheckSquare,
   Square, Calendar, User, Tag, Clock, MoreHorizontal, Send,
   Plus, Check, Trash2, Download, FileText, FileImage,
-  Film, Music, Archive, Upload,
+  Film, Music, Archive, Upload, ExternalLink,
 } from "lucide-react";
 import type { Task, Priority, Assignee } from "@/types/domain";
 import { cn, PRIORITY_CONFIG } from "@/lib/utils";
@@ -753,27 +753,47 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                       key={file.id}
                       className="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 bg-gray-50 hover:border-gray-200 hover:bg-white transition-colors group"
                     >
-                      {/* Thumbnail or icon */}
-                      {file.url ? (
-                        <img
-                          src={file.url}
-                          alt={file.name}
-                          className="w-12 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-200"
-                        />
-                      ) : (
-                        <div className="w-12 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center flex-shrink-0">
-                          {fileIcon(file.type)}
-                        </div>
-                      )}
+                      {/* Thumbnail or icon — click to open */}
+                      <button
+                        onClick={() => file.url && window.open(file.url, "_blank")}
+                        className="flex-shrink-0 focus:outline-none"
+                        title="Ver archivo"
+                        disabled={!file.url}
+                      >
+                        {file.url ? (
+                          <img
+                            src={file.url}
+                            alt={file.name}
+                            className="w-12 h-10 rounded-lg object-cover border border-gray-200 hover:opacity-80 transition-opacity"
+                          />
+                        ) : (
+                          <div className="w-12 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center">
+                            {fileIcon(file.type)}
+                          </div>
+                        )}
+                      </button>
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-800 truncate">{file.name}</p>
+                      {/* Info — click to open */}
+                      <button
+                        onClick={() => file.url && window.open(file.url, "_blank")}
+                        className="flex-1 min-w-0 text-left"
+                        disabled={!file.url}
+                      >
+                        <p className="text-xs font-medium text-gray-800 truncate hover:text-[#2F3988] transition-colors">
+                          {file.name}
+                        </p>
                         <p className="text-[11px] text-gray-400 mt-0.5">{file.uploading ? "Subiendo…" : file.size}</p>
-                      </div>
+                      </button>
 
                       {/* Actions — visible on hover */}
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                        <button
+                          onClick={() => file.url && window.open(file.url, "_blank")}
+                          title="Abrir"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => {
                             if (file.url) {
