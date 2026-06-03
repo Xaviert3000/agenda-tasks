@@ -130,7 +130,7 @@ export async function createSubtask(taskId: string, title: string): Promise<{ id
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("subtasks")
-    .insert({ task_id: taskId, title, position: Date.now() })
+    .insert({ task_id: taskId, title, position: Math.floor(Date.now() / 1000) })
     .select("id")
     .single();
   if (error) { console.error("[createSubtask] error:", error.message); return null; }

@@ -65,6 +65,28 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
         .order("position")
     : { data: [] };
 
+  // Assignees for all tasks
+  const taskIds = (rawTasks ?? []).map((t) => t.id);
+  const { data: rawAssignees } = taskIds.length
+    ? await supabase
+        .from("task_assignees")
+        .select("task_id, profiles(id, name, avatar_url)")
+        .in("task_id", taskIds)
+    : { data: [] };
+
+  // Build assignee map: task_id → Assignee[]
+  const assigneeMap: Record<string, { id: string; name: string; avatar: string }[]> = {};
+  for (const a of rawAssignees ?? []) {
+    const p = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+    if (!p) continue;
+    if (!assigneeMap[a.task_id]) assigneeMap[a.task_id] = [];
+    assigneeMap[a.task_id].push({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.id}`,
+    });
+  }
+
   // Build domain KanbanList[]
   const lists: KanbanList[] = columns.map((c) => ({
     id: c.id,
@@ -79,7 +101,7 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
         description: t.description ?? "",
         labels: [],
         priority: (t.priority as Task["priority"]) ?? "med",
-        assignees: [],
+        assignees: assigneeMap[t.id] ?? [],
         subtasks: { total: 0, completed: 0 },
         attachmentCount: t.attachment_count ?? 0,
         commentCount: t.comment_count ?? 0,
