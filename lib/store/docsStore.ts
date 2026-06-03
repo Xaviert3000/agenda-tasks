@@ -183,8 +183,9 @@ export const useDocsStore = create<DocsState>((set, get) => ({
       };
     });
 
-    // If no docs exist, seed with the getting-started guide
-    if (docs.length === 0) {
+    // If no docs exist, seed with the getting-started guide (only once — check DB directly)
+    const guideAlreadyExists = docs.some((d) => d.title === "Guía de inicio rápido");
+    if (docs.length === 0 && !guideAlreadyExists) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: newDoc } = await supabase
