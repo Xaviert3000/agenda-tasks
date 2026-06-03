@@ -47,13 +47,21 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
     });
 
   const handleNewDoc = async (folderId?: string) => {
-    const id = await addDoc(folderId);
-    if (folderId) setExpandedFolders((p) => new Set([...p, folderId]));
-    router.push(`/${workspace}/docs/${id}`);
+    try {
+      const id = await addDoc(folderId);
+      if (folderId) setExpandedFolders((p) => new Set([...p, folderId]));
+      router.push(`/${workspace}/docs/${id}`);
+    } catch (err) {
+      console.error("[docs] addDoc failed:", err);
+    }
   };
 
   const handleCreateFolder = async () => {
-    if (folderName.trim()) await addFolder(folderName.trim());
+    try {
+      if (folderName.trim()) await addFolder(folderName.trim());
+    } catch (err) {
+      console.error("[docs] addFolder failed:", err);
+    }
     setCreatingFolder(false);
     setFolderName("");
   };
