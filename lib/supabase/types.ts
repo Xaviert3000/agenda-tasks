@@ -180,6 +180,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      kanban_columns: {
+        Row: {
+          id: string;
+          list_id: string;
+          name: string;
+          color: string;
+          wip_limit: number | null;
+          position: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          list_id: string;
+          name: string;
+          color?: string;
+          wip_limit?: number | null;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          color?: string;
+          wip_limit?: number | null;
+          position?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       kanban_lists: {
         Row: {
           id: string;
