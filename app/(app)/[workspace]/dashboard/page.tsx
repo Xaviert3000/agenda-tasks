@@ -131,16 +131,22 @@ export default async function DashboardPage({ params }: Props) {
   // Fetch sidebar lists for all projects, then their columns
   const { data: sidebarLists } = await supabase
     .from("kanban_lists")
-    .select("id")
+    .select("id, project_id")
     .in("project_id", projectIds);
 
   const sidebarListIds = (sidebarLists ?? []).map((l) => l.id);
 
   const { data: columns } = sidebarListIds.length
-    ? await supabase.from("kanban_columns").select("id, color").in("list_id", sidebarListIds)
+    ? await supabase.from("kanban_columns").select("id, color, list_id").in("list_id", sidebarListIds)
     : { data: [] };
 
   const columnIds = (columns ?? []).map((c) => c.id);
+
+  // Map column_id → project_id for task grouping
+  const sidebarListMap = Object.fromEntries((sidebarLists ?? []).map((l) => [l.id, l.project_id]));
+  const columnProjectMap = Object.fromEntries(
+    (columns ?? []).map((c) => [c.id, sidebarListMap[c.list_id]])
+  );
 
   // Fetch tasks
   const { data: tasks } = columnIds.length
@@ -313,15 +319,15 @@ export default async function DashboardPage({ params }: Props) {
             </div>
             <div className="divide-y divide-gray-50">
               {projects.slice(0, 5).map((project) => {
-                const projectLists = (lists ?? []).filter((l) => l.project_id === project.id);
+                const projectSidebarLists = (sidebarLists ?? []).filter((l) => l.project_id === project.id);
                 const projectTasks = allTasks.filter((t) =>
-                  projectLists.some((l) => l.id === t.list_id)
+                  columnProjectMap[t.list_id] === project.id
                 );
                 const projectCompleted = projectTasks.filter((t) => t.is_completed).length;
                 const projectPct = projectTasks.length > 0
                   ? Math.round((projectCompleted / projectTasks.length) * 100)
                   : 0;
-                const firstList = projectLists[0];
+                const firstList = projectSidebarLists[0];
                 return (
                   <Link
                     key={project.id}
