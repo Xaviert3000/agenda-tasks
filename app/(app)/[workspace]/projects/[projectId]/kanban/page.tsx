@@ -5,10 +5,12 @@ import type { KanbanList, Task } from "@/types/domain";
 
 interface KanbanPageProps {
   params: Promise<{ workspace: string; projectId: string }>;
+  searchParams: Promise<{ task?: string }>;
 }
 
-export default async function KanbanPage({ params }: KanbanPageProps) {
+export default async function KanbanPage({ params, searchParams }: KanbanPageProps) {
   const { projectId } = await params;
+  const { task: initialOpenTaskId } = await searchParams;
   const authClient = await createClient();
 
   // Current user (auth via the RLS-bound client)
@@ -160,6 +162,7 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
         projectName={proj?.name}
         projectIcon={proj?.icon}
         projectMembers={projectMembers}
+        initialOpenTaskId={initialOpenTaskId}
       />
     </div>
   );

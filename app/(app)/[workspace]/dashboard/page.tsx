@@ -147,6 +147,8 @@ export default async function DashboardPage({ params }: Props) {
   const columnProjectMap = Object.fromEntries(
     (columns ?? []).map((c) => [c.id, sidebarListMap[c.list_id]])
   );
+  // Map column_id → kanban_list_id (for building task URLs)
+  const columnToListMap = Object.fromEntries((columns ?? []).map((c) => [c.id, c.list_id]));
 
   // Fetch tasks
   const { data: tasks } = columnIds.length
@@ -281,10 +283,14 @@ export default async function DashboardPage({ params }: Props) {
               ) : (
                 myTasks.slice(0, 5).map((task) => {
                   const list = listMap[task.list_id];
+                  const kanbanListId = columnToListMap[task.list_id];
+                  const taskUrl = kanbanListId
+                    ? `/${workspaceSlug}/projects/${kanbanListId}/kanban?task=${task.id}`
+                    : null;
                   const isOverdue = !task.is_completed && task.due_date && task.due_date < today;
                   const isDueSoon = !isOverdue && task.due_date && task.due_date <= new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0];
-                  return (
-                    <div key={task.id} className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors cursor-pointer">
+                  const inner = (
+                    <>
                       <div
                         className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
                         style={{ background: list?.color ?? "#6B7280" }}
@@ -302,6 +308,15 @@ export default async function DashboardPage({ params }: Props) {
                           </span>
                         </div>
                       </div>
+                    </>
+                  );
+                  return taskUrl ? (
+                    <Link key={task.id} href={taskUrl} className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                      {inner}
+                    </Link>
+                  ) : (
+                    <div key={task.id} className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                      {inner}
                     </div>
                   );
                 })

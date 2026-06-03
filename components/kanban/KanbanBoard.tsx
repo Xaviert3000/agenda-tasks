@@ -25,16 +25,17 @@ interface KanbanBoardProps {
   projectName?: string;
   projectIcon?: string;
   projectMembers?: Assignee[];
+  initialOpenTaskId?: string;
 }
 
 /* Read current lists without creating a reactive dependency */
 const getLists = () => useKanbanStore.getState().lists;
 
-export function KanbanBoard({ initialLists, projectName, projectIcon, projectMembers }: KanbanBoardProps) {
+export function KanbanBoard({ initialLists, projectName, projectIcon, projectMembers, initialOpenTaskId }: KanbanBoardProps) {
   const { setLists, addTask, moveTask } = useKanbanStore();
   const displayLists = useFilteredLists(initialLists);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialOpenTaskId ?? null);
 
   const selectedTask = selectedTaskId
     ? displayLists.flatMap((l) => l.tasks).find((t) => t.id === selectedTaskId) ?? null

@@ -44,8 +44,9 @@ interface KanbanBoardWrapperProps {
   projectName?: string;
   projectIcon?: string;
   projectMembers?: Assignee[];
+  initialOpenTaskId?: string;
 }
 
-export function KanbanBoardWrapper({ initialLists, projectName, projectIcon, projectMembers }: KanbanBoardWrapperProps) {
-  return <KanbanBoard initialLists={initialLists} projectName={projectName} projectIcon={projectIcon} projectMembers={projectMembers} />;
+export function KanbanBoardWrapper({ initialLists, projectName, projectIcon, projectMembers, initialOpenTaskId }: KanbanBoardWrapperProps) {
+  return <KanbanBoard initialLists={initialLists} projectName={projectName} projectIcon={projectIcon} projectMembers={projectMembers} initialOpenTaskId={initialOpenTaskId} />;
 }
