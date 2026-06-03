@@ -65,19 +65,22 @@ export default async function KanbanPage({ params }: KanbanPageProps) {
         .order("position")
     : { data: [] };
 
-  // Assignees for all tasks
+  // Assignees for all tasks (two queries — no FK declared between task_assignees and profiles)
   const taskIds = (rawTasks ?? []).map((t) => t.id);
   const { data: rawAssignees } = taskIds.length
-    ? await supabase
-        .from("task_assignees")
-        .select("task_id, profiles(id, name, avatar_url)")
-        .in("task_id", taskIds)
+    ? await supabase.from("task_assignees").select("task_id, user_id").in("task_id", taskIds)
     : { data: [] };
+
+  const assigneeUserIds = [...new Set((rawAssignees ?? []).map((a) => a.user_id))];
+  const { data: assigneeProfiles } = assigneeUserIds.length
+    ? await supabase.from("profiles").select("id, name, avatar_url").in("id", assigneeUserIds)
+    : { data: [] };
+  const assigneeProfileMap = new Map((assigneeProfiles ?? []).map((p) => [p.id, p]));
 
   // Build assignee map: task_id → Assignee[]
   const assigneeMap: Record<string, { id: string; name: string; avatar: string }[]> = {};
   for (const a of rawAssignees ?? []) {
-    const p = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+    const p = assigneeProfileMap.get(a.user_id);
     if (!p) continue;
     if (!assigneeMap[a.task_id]) assigneeMap[a.task_id] = [];
     assigneeMap[a.task_id].push({
