@@ -401,7 +401,10 @@ export type Database = {
           workspace_id: string;
           project_id: string | null;
           title: string;
-          content: Json | null;
+          content: string | null;
+          icon: string;
+          folder_id: string | null;
+          tags: string[];
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -411,7 +414,10 @@ export type Database = {
           workspace_id: string;
           project_id?: string | null;
           title?: string;
-          content?: Json | null;
+          content?: string | null;
+          icon?: string;
+          folder_id?: string | null;
+          tags?: string[];
           created_by: string;
           created_at?: string;
           updated_at?: string;
@@ -419,8 +425,54 @@ export type Database = {
         Update: {
           project_id?: string | null;
           title?: string;
-          content?: Json | null;
+          content?: string | null;
+          icon?: string;
+          folder_id?: string | null;
+          tags?: string[];
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      document_folders: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          icon: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          icon?: string;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          icon?: string;
+        };
+        Relationships: [];
+      };
+      document_comments: {
+        Row: {
+          id: string;
+          document_id: string;
+          author_id: string;
+          text: string;
+          resolved: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          document_id: string;
+          author_id: string;
+          text: string;
+          resolved?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          resolved?: boolean;
         };
         Relationships: [];
       };

@@ -171,6 +171,26 @@ export default function DocEditorPage() {
   const [newComment,     setNewComment]     = useState("");
   const [showResolved,   setShowResolved]   = useState(false);
 
+  // ── Current user ──
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string } | null>(null);
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("name, avatar_url")
+        .eq("id", user.id)
+        .single();
+      setCurrentUser({
+        id: user.id,
+        name: profile?.name ?? "Usuario",
+        avatar: profile?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}&backgroundColor=b6e3f4`,
+      });
+    })();
+  }, []);
+
   // ── Workspace members for @@ mentions ──
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   useEffect(() => {
@@ -471,7 +491,10 @@ export default function DocEditorPage() {
   /* ── Comments ── */
   const handleAddComment = () => {
     if (!newComment.trim()) return;
-    addComment(docId, newComment.trim());
+    const authorId = currentUser?.id ?? "anonymous";
+    const authorName = currentUser?.name ?? "Usuario";
+    const authorAvatar = currentUser?.avatar ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4`;
+    addComment(docId, newComment.trim(), authorId, authorName, authorAvatar);
     setNewComment("");
     setMentionMenu(null);
   };
@@ -887,8 +910,8 @@ export default function DocEditorPage() {
             <div className="border-t border-gray-100 p-3 flex-shrink-0">
               <div className="flex items-start gap-2">
                 <img
-                  src="https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4"
-                  alt="Tú" className="w-7 h-7 rounded-full border border-gray-200 flex-shrink-0 mt-0.5"
+                  src={currentUser?.avatar ?? "https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4"}
+                  alt={currentUser?.name ?? "Tú"} className="w-7 h-7 rounded-full border border-gray-200 flex-shrink-0 mt-0.5"
                 />
                 <div className="flex-1 relative">
 

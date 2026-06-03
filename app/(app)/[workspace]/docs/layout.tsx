@@ -20,7 +20,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
 
   const activeDocId = pathname.match(/\/docs\/([^/]+)/)?.[1];
 
-  const { docs, folders, addDoc, addFolder, deleteDoc, moveDoc } = useDocsStore();
+  const { docs, folders, addDoc, addFolder, deleteDoc, moveDoc, loadDocs } = useDocsStore();
 
   const [search, setSearch]           = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
@@ -29,6 +29,11 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [folderName, setFolderName]         = useState("");
   const folderInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadDocs(workspace);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace]);
 
   useEffect(() => {
     if (creatingFolder) setTimeout(() => folderInputRef.current?.focus(), 50);
@@ -41,14 +46,14 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
       return next;
     });
 
-  const handleNewDoc = (folderId?: string) => {
-    const id = addDoc(folderId);
+  const handleNewDoc = async (folderId?: string) => {
+    const id = await addDoc(folderId);
     if (folderId) setExpandedFolders((p) => new Set([...p, folderId]));
     router.push(`/${workspace}/docs/${id}`);
   };
 
-  const handleCreateFolder = () => {
-    if (folderName.trim()) addFolder(folderName.trim());
+  const handleCreateFolder = async () => {
+    if (folderName.trim()) await addFolder(folderName.trim());
     setCreatingFolder(false);
     setFolderName("");
   };

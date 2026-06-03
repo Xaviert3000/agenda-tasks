@@ -351,11 +351,11 @@ export default function MessagesPage() {
     setNewTaskListId("todo"); setNewTaskPriority("med");
   };
 
-  const handleCreateDoc = () => {
+  const handleCreateDoc = async () => {
     if (!newDocTitle.trim()) return;
     const folderId = newDocFolderId === "none" ? undefined : newDocFolderId;
-    const id = addDoc(folderId);
-    updateDoc(id, { title: newDocTitle.trim() });
+    const id = await addDoc(folderId);
+    await updateDoc(id, { title: newDocTitle.trim() });
     const selectedFolder = folders.find((f) => f.id === folderId);
     handleSelectRef({
       type: "doc",

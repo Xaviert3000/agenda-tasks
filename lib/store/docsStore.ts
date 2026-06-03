@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createClient } from "@/lib/supabase/client";
 
 export interface DocComment {
   id: string;
@@ -27,19 +28,15 @@ export interface DocFolder {
   icon: string;
 }
 
-const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
-
 export const GETTING_STARTED_DOC_ID = "getting-started";
 
-const GUIDE_DOC: Doc = {
-  id: GETTING_STARTED_DOC_ID,
-  title: "Guía de inicio rápido",
-  icon: "🚀",
-  createdAt: today,
-  updatedAt: today,
-  tags: ["Guía", "Inicio"],
-  comments: [],
-  content: `<h1>🚀 Bienvenido a agenda.ME</h1>
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-MX", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+}
+
+const GUIDE_CONTENT = `<h1>🚀 Bienvenido a agenda.ME</h1>
 <p>Esta guía te ayudará a sacar el máximo provecho de tu espacio de trabajo en pocos minutos.</p>
 
 <h2>1. Crea tu primer proyecto</h2>
@@ -77,93 +74,315 @@ const GUIDE_DOC: Doc = {
 <li>Agregar comentarios y menciones.</li>
 </ul>
 
-<blockquote>💡 <strong>Consejo:</strong> Empieza creando un proyecto, añade algunas tareas e invita a un compañero. En menos de 10 minutos tendrás tu equipo organizado.</blockquote>`,
-};
-
-const INITIAL_DOCS: Doc[] = [GUIDE_DOC];
-const INITIAL_FOLDERS: DocFolder[] = [];
+<blockquote>💡 <strong>Consejo:</strong> Empieza creando un proyecto, añade algunas tareas e invita a un compañero. En menos de 10 minutos tendrás tu equipo organizado.</blockquote>`;
 
 interface DocsState {
   docs: Doc[];
   folders: DocFolder[];
-  addDoc: (folderId?: string) => string;
-  addFolder: (name: string) => string;
-  updateDoc: (id: string, updates: Partial<Pick<Doc, "title" | "content" | "icon">>) => void;
-  updateDocTags: (id: string, tags: string[]) => void;
-  moveDoc: (id: string, folderId: string | undefined) => void;
-  deleteDoc: (id: string) => void;
-  deleteFolder: (id: string) => void;
-  addComment: (docId: string, text: string) => void;
-  resolveComment: (docId: string, commentId: string) => void;
-  deleteComment: (docId: string, commentId: string) => void;
+  workspaceId: string | undefined;
+  loadDocs: (workspaceSlug: string) => Promise<void>;
+  addDoc: (folderId?: string) => Promise<string>;
+  addFolder: (name: string) => Promise<string>;
+  updateDoc: (id: string, updates: Partial<Pick<Doc, "title" | "content" | "icon">>) => Promise<void>;
+  updateDocTags: (id: string, tags: string[]) => Promise<void>;
+  moveDoc: (id: string, folderId: string | undefined) => Promise<void>;
+  deleteDoc: (id: string) => Promise<void>;
+  deleteFolder: (id: string) => Promise<void>;
+  addComment: (docId: string, text: string, authorId: string, authorName: string, authorAvatar: string) => Promise<void>;
+  resolveComment: (docId: string, commentId: string) => Promise<void>;
+  deleteComment: (docId: string, commentId: string) => Promise<void>;
 }
 
 export const useDocsStore = create<DocsState>((set, get) => ({
-  docs: INITIAL_DOCS,
-  folders: INITIAL_FOLDERS,
+  docs: [],
+  folders: [],
+  workspaceId: undefined,
 
-  addDoc: (folderId) => {
-    const id = `doc-${Date.now()}`;
+  loadDocs: async (workspaceSlug: string) => {
+    const supabase = createClient();
+
+    // Get workspace id from slug
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("id")
+      .eq("slug", workspaceSlug)
+      .single();
+
+    if (!ws) return;
+    const workspaceId = ws.id;
+
+    set({ workspaceId });
+
+    // Load folders
+    const { data: rawFolders } = await supabase
+      .from("document_folders")
+      .select("id, name, icon")
+      .eq("workspace_id", workspaceId)
+      .order("created_at");
+
+    const folders: DocFolder[] = (rawFolders ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      icon: f.icon,
+    }));
+
+    // Load docs with comments
+    const { data: rawDocs } = await supabase
+      .from("documents")
+      .select(`
+        id, title, content, icon, folder_id, tags, created_at, updated_at,
+        document_comments(id, author_id, text, resolved, created_at, profiles(name, avatar_url))
+      `)
+      .eq("workspace_id", workspaceId)
+      .order("created_at");
+
+    const docs: Doc[] = (rawDocs ?? []).map((d) => {
+      type RawComment = {
+        id: string;
+        author_id: string;
+        text: string;
+        resolved: boolean;
+        created_at: string;
+        profiles: { name: string; avatar_url: string | null } | null;
+      };
+      const comments: DocComment[] = ((d.document_comments as unknown as RawComment[]) ?? []).map((c) => ({
+        id: c.id,
+        author: c.profiles?.name ?? "Usuario",
+        avatar: c.profiles?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.author_id}`,
+        text: c.text,
+        createdAt: fmtDate(c.created_at),
+        resolved: c.resolved,
+      }));
+
+      return {
+        id: d.id,
+        title: d.title,
+        content: (d.content as string) ?? "",
+        icon: d.icon ?? "📄",
+        folderId: d.folder_id ?? undefined,
+        tags: (d.tags as string[]) ?? [],
+        createdAt: fmtDate(d.created_at),
+        updatedAt: fmtDate(d.updated_at),
+        comments,
+      };
+    });
+
+    // If no docs exist, seed with the getting-started guide
+    if (docs.length === 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: newDoc } = await supabase
+          .from("documents")
+          .insert({
+            workspace_id: workspaceId,
+            title: "Guía de inicio rápido",
+            content: GUIDE_CONTENT,
+            icon: "🚀",
+            tags: ["Guía", "Inicio"],
+            created_by: user.id,
+          })
+          .select("id, title, content, icon, folder_id, tags, created_at, updated_at")
+          .single();
+
+        if (newDoc) {
+          docs.push({
+            id: newDoc.id,
+            title: newDoc.title,
+            content: (newDoc.content as string) ?? "",
+            icon: newDoc.icon ?? "🚀",
+            folderId: undefined,
+            tags: (newDoc.tags as string[]) ?? [],
+            createdAt: fmtDate(newDoc.created_at),
+            updatedAt: fmtDate(newDoc.updated_at),
+            comments: [],
+          });
+        }
+      }
+    }
+
+    set({ docs, folders });
+  },
+
+  addDoc: async (folderId) => {
+    const supabase = createClient();
+    const { workspaceId } = get();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!workspaceId || !user) {
+      // Fallback: local only
+      const id = `doc-${Date.now()}`;
+      const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+      const newDoc: Doc = {
+        id,
+        title: "Sin título",
+        content: "<p>Empieza a escribir aquí...</p>",
+        icon: "📄",
+        folderId,
+        createdAt: today,
+        updatedAt: today,
+        tags: [],
+        comments: [],
+      };
+      set((s) => ({ docs: [...s.docs, newDoc] }));
+      return id;
+    }
+
+    const { data, error } = await supabase
+      .from("documents")
+      .insert({
+        workspace_id: workspaceId,
+        title: "Sin título",
+        content: "<p>Empieza a escribir aquí...</p>",
+        icon: "📄",
+        folder_id: folderId ?? null,
+        tags: [],
+        created_by: user.id,
+      })
+      .select("id, title, content, icon, folder_id, tags, created_at, updated_at")
+      .single();
+
+    if (error || !data) {
+      throw new Error(error?.message ?? "Error creating document");
+    }
+
     const newDoc: Doc = {
-      id,
-      title: "Sin título",
-      content: "<p>Empieza a escribir aquí...</p>",
-      icon: "📄",
-      folderId,
-      createdAt: today,
-      updatedAt: today,
-      tags: [],
+      id: data.id,
+      title: data.title,
+      content: (data.content as string) ?? "",
+      icon: data.icon ?? "📄",
+      folderId: data.folder_id ?? undefined,
+      tags: (data.tags as string[]) ?? [],
+      createdAt: fmtDate(data.created_at),
+      updatedAt: fmtDate(data.updated_at),
       comments: [],
     };
+
     set((s) => ({ docs: [...s.docs, newDoc] }));
-    return id;
+    return data.id;
   },
 
-  addFolder: (name) => {
-    const id = `folder-${Date.now()}`;
-    set((s) => ({
-      folders: [...s.folders, { id, name, icon: "📂" }],
-    }));
-    return id;
+  addFolder: async (name) => {
+    const supabase = createClient();
+    const { workspaceId } = get();
+
+    if (!workspaceId) {
+      const id = `folder-${Date.now()}`;
+      set((s) => ({ folders: [...s.folders, { id, name, icon: "📂" }] }));
+      return id;
+    }
+
+    const { data, error } = await supabase
+      .from("document_folders")
+      .insert({ workspace_id: workspaceId, name, icon: "📂" })
+      .select("id, name, icon")
+      .single();
+
+    if (error || !data) {
+      throw new Error(error?.message ?? "Error creating folder");
+    }
+
+    set((s) => ({ folders: [...s.folders, { id: data.id, name: data.name, icon: data.icon }] }));
+    return data.id;
   },
 
-  updateDoc: (id, updates) =>
+  updateDoc: async (id, updates) => {
+    const supabase = createClient();
+
+    // Update local state immediately (optimistic)
+    const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
     set((s) => ({
       docs: s.docs.map((d) =>
         d.id !== id ? d : { ...d, ...updates, updatedAt: today }
       ),
-    })),
+    }));
 
-  updateDocTags: (id, tags) =>
+    await supabase
+      .from("documents")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  },
+
+  updateDocTags: async (id, tags) => {
+    const supabase = createClient();
+    const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+
     set((s) => ({
       docs: s.docs.map((d) => (d.id !== id ? d : { ...d, tags, updatedAt: today })),
-    })),
+    }));
 
-  moveDoc: (id, folderId) =>
+    await supabase
+      .from("documents")
+      .update({ tags, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  },
+
+  moveDoc: async (id, folderId) => {
+    const supabase = createClient();
+    const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+
     set((s) => ({
       docs: s.docs.map((d) =>
         d.id !== id ? d : { ...d, folderId, updatedAt: today }
       ),
-    })),
+    }));
 
-  deleteDoc: (id) =>
-    set((s) => ({ docs: s.docs.filter((d) => d.id !== id) })),
+    await supabase
+      .from("documents")
+      .update({ folder_id: folderId ?? null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+  },
 
-  deleteFolder: (id) =>
+  deleteDoc: async (id) => {
+    const supabase = createClient();
+    set((s) => ({ docs: s.docs.filter((d) => d.id !== id) }));
+    await supabase.from("documents").delete().eq("id", id);
+  },
+
+  deleteFolder: async (id) => {
+    const supabase = createClient();
     set((s) => ({
       folders: s.folders.filter((f) => f.id !== id),
       docs: s.docs.map((d) => (d.folderId === id ? { ...d, folderId: undefined } : d)),
-    })),
+    }));
+    await supabase.from("document_folders").delete().eq("id", id);
+  },
 
-  addComment: (docId, text) => {
+  addComment: async (docId, text, authorId, authorName, authorAvatar) => {
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from("document_comments")
+      .insert({ document_id: docId, author_id: authorId, text, resolved: false })
+      .select("id, created_at")
+      .single();
+
+    if (error || !data) {
+      // Fallback: local only
+      const comment: DocComment = {
+        id: `comment-${Date.now()}`,
+        author: authorName,
+        avatar: authorAvatar,
+        text,
+        createdAt: new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" }),
+        resolved: false,
+      };
+      set((s) => ({
+        docs: s.docs.map((d) =>
+          d.id !== docId ? d : { ...d, comments: [...d.comments, comment] }
+        ),
+      }));
+      return;
+    }
+
     const comment: DocComment = {
-      id: `comment-${Date.now()}`,
-      author: "Tú",
-      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4",
+      id: data.id,
+      author: authorName,
+      avatar: authorAvatar,
       text,
-      createdAt: today,
+      createdAt: fmtDate(data.created_at),
       resolved: false,
     };
+
     set((s) => ({
       docs: s.docs.map((d) =>
         d.id !== docId ? d : { ...d, comments: [...d.comments, comment] }
@@ -171,7 +390,15 @@ export const useDocsStore = create<DocsState>((set, get) => ({
     }));
   },
 
-  resolveComment: (docId, commentId) =>
+  resolveComment: async (docId, commentId) => {
+    const supabase = createClient();
+    const { docs } = get();
+    const doc = docs.find((d) => d.id === docId);
+    const comment = doc?.comments.find((c) => c.id === commentId);
+    if (!comment) return;
+
+    const newResolved = !comment.resolved;
+
     set((s) => ({
       docs: s.docs.map((d) =>
         d.id !== docId
@@ -179,18 +406,29 @@ export const useDocsStore = create<DocsState>((set, get) => ({
           : {
               ...d,
               comments: d.comments.map((c) =>
-                c.id !== commentId ? c : { ...c, resolved: !c.resolved }
+                c.id !== commentId ? c : { ...c, resolved: newResolved }
               ),
             }
       ),
-    })),
+    }));
 
-  deleteComment: (docId, commentId) =>
+    await supabase
+      .from("document_comments")
+      .update({ resolved: newResolved })
+      .eq("id", commentId);
+  },
+
+  deleteComment: async (docId, commentId) => {
+    const supabase = createClient();
+
     set((s) => ({
       docs: s.docs.map((d) =>
         d.id !== docId
           ? d
           : { ...d, comments: d.comments.filter((c) => c.id !== commentId) }
       ),
-    })),
+    }));
+
+    await supabase.from("document_comments").delete().eq("id", commentId);
+  },
 }));
