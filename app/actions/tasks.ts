@@ -24,7 +24,7 @@ export async function createTask(
       title,
       priority,
       created_by: user.id,
-      position: Date.now(),
+      position: Math.floor(Date.now() / 1000),
     })
     .select("id")
     .single();
