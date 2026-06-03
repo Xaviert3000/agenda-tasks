@@ -171,6 +171,13 @@ export default function DocEditorPage() {
   const [newComment,     setNewComment]     = useState("");
   const [showResolved,   setShowResolved]   = useState(false);
 
+  // ── Image toolbar (resize) ──
+  const [imgToolbar, setImgToolbar] = useState<{
+    img: HTMLImageElement;
+    top: number; left: number; width: number;
+  } | null>(null);
+  const imgToolbarRef = useRef<HTMLDivElement>(null);
+
   // ── Current user ──
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string } | null>(null);
   useEffect(() => {
@@ -244,6 +251,41 @@ export default function DocEditorPage() {
 
   useEffect(() => { titleRef.current = title; }, [title]);
   useEffect(() => { iconRef.current  = icon;  }, [icon]);
+
+  // ── Image click → show resize toolbar ──
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "IMG" && target.dataset.docImg) {
+        const img = target as HTMLImageElement;
+        const editorRect = editor.getBoundingClientRect();
+        const imgRect = img.getBoundingClientRect();
+        setImgToolbar({
+          img,
+          top: imgRect.top - editorRect.top - 44,
+          left: imgRect.left - editorRect.left,
+          width: img.offsetWidth,
+        });
+        e.stopPropagation();
+      } else if (!imgToolbarRef.current?.contains(target)) {
+        setImgToolbar(null);
+      }
+    };
+    editor.addEventListener("click", handleClick);
+    return () => editor.removeEventListener("click", handleClick);
+  }, []);
+
+  const setImageWidth = useCallback((pct: number) => {
+    if (!imgToolbar) return;
+    imgToolbar.img.style.width = `${pct}%`;
+    imgToolbar.img.style.maxWidth = "100%";
+    setImgToolbar((t) => t ? { ...t, width: imgToolbar.img.offsetWidth } : null);
+    if (editorRef.current) {
+      editorRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, [imgToolbar]);
 
   // Re-init when navigating between docs
   useEffect(() => {
@@ -319,19 +361,40 @@ export default function DocEditorPage() {
   }, [triggerSave]);
 
   /* ── File / image insert handlers ── */
-  const handleImageFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const src = ev.target?.result as string;
-      insertHtmlAtCursor(
-        `<figure style="margin:12px 0;text-align:center"><img src="${src}" alt="${file.name}" style="max-width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.08)" /><figcaption style="font-size:12px;color:#9CA3AF;margin-top:6px">${file.name}</figcaption></figure><p><br></p>`
-      );
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
-  }, [insertHtmlAtCursor]);
+
+    const supabase = createClient();
+    const ext = file.name.split(".").pop() ?? "png";
+    const path = `${docId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    // Show placeholder while uploading
+    const placeholderId = `img-placeholder-${Date.now()}`;
+    insertHtmlAtCursor(
+      `<p id="${placeholderId}" style="color:#9CA3AF;font-size:13px">⏳ Subiendo imagen...</p>`
+    );
+
+    const { error } = await supabase.storage.from("doc-images").upload(path, file, { contentType: file.type });
+    const placeholder = document.getElementById(placeholderId);
+
+    if (error || !placeholder) {
+      placeholder?.remove();
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from("doc-images").getPublicUrl(path);
+    const figure = document.createElement("figure");
+    figure.style.cssText = "margin:16px 0;display:block;";
+    figure.innerHTML = `<img src="${publicUrl}" alt="${file.name}" style="width:100%;max-width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,0.08);display:block;cursor:pointer;" data-doc-img="true" /><p><br></p>`;
+    placeholder.replaceWith(figure);
+
+    // Trigger save
+    if (editorRef.current) {
+      editorRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, [docId, insertHtmlAtCursor]);
 
   const handleAttachFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -757,6 +820,39 @@ export default function DocEditorPage() {
                   "[&_th]:border [&_th]:border-gray-200 [&_th]:px-3 [&_th]:py-2 [&_th]:text-sm [&_th]:bg-gray-50 [&_th]:font-semibold",
                 )}
               />
+
+              {/* ── Image resize toolbar ── */}
+              {imgToolbar && (
+                <div
+                  ref={imgToolbarRef}
+                  style={{ top: imgToolbar.top, left: imgToolbar.left }}
+                  className="absolute z-40 flex items-center gap-1 bg-gray-900 text-white rounded-xl px-2 py-1.5 shadow-xl text-xs"
+                >
+                  <span className="text-gray-400 mr-1 text-[11px]">Tamaño:</span>
+                  {[25, 50, 75, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      onMouseDown={(e) => { e.preventDefault(); setImageWidth(pct); }}
+                      className="px-2 py-0.5 rounded-lg hover:bg-white/20 transition-colors font-medium"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  <div className="w-px h-4 bg-white/20 mx-1" />
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      imgToolbar.img.parentElement?.remove();
+                      setImgToolbar(null);
+                      if (editorRef.current) editorRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+                    }}
+                    className="px-2 py-0.5 rounded-lg hover:bg-red-500/60 transition-colors text-red-300 hover:text-white"
+                    title="Eliminar imagen"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
               {/* ── Slash command menu ── */}
               {slashMenu && filteredCmds.length > 0 && (
