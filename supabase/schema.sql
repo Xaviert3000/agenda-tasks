@@ -1,434 +1,412 @@
 -- ============================================================
--- agenda-tasks — Schema completo
--- Ejecutar en Supabase Dashboard > SQL Editor
+-- AGENDA-TASKS — Schema completo para Supabase
+-- Ejecutar en: Supabase Dashboard → SQL Editor
 -- ============================================================
 
--- Enums
-create type priority as enum ('low', 'med', 'high', 'urgent');
+-- ── Extensiones ─────────────────────────────────────────────
+create extension if not exists "uuid-ossp";
+
+-- ── Enums ───────────────────────────────────────────────────
+create type priority       as enum ('low', 'med', 'high', 'urgent');
 create type workspace_role as enum ('owner', 'admin', 'member');
-create type project_role as enum ('owner', 'admin', 'member');
+create type project_role   as enum ('owner', 'admin', 'member');
 
--- ============================================================
--- Profiles (extiende auth.users)
--- ============================================================
-create table profiles (
-  id          uuid primary key references auth.users(id) on delete cascade,
-  name        text not null,
-  avatar_url  text,
-  is_online   boolean not null default false,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+-- ── profiles ────────────────────────────────────────────────
+create table if not exists profiles (
+  id         uuid primary key references auth.users(id) on delete cascade,
+  name       text        not null default '',
+  avatar_url text,
+  is_online  boolean     not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
--- Auto-crear perfil al registrarse
+-- Auto-crear perfil al registrar usuario
 create or replace function handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer as $$
 begin
   insert into profiles (id, name, avatar_url)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     new.raw_user_meta_data->>'avatar_url'
-  );
+  )
+  on conflict (id) do nothing;
   return new;
 end;
 $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure handle_new_user();
 
--- ============================================================
--- Workspaces
--- ============================================================
-create table workspaces (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  slug        text not null unique,
-  created_by  uuid not null references auth.users(id),
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+-- ── workspaces ──────────────────────────────────────────────
+create table if not exists workspaces (
+  id                     uuid primary key default uuid_generate_v4(),
+  name                   text        not null,
+  slug                   text        not null unique,
+  plan                   text        not null default 'free' check (plan in ('free','pro')),
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  subscription_status    text        not null default 'inactive'
+                           check (subscription_status in ('active','inactive','past_due','cancelled')),
+  created_by             uuid        not null references auth.users(id),
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
 );
 
-create table workspace_members (
-  workspace_id  uuid not null references workspaces(id) on delete cascade,
-  user_id       uuid not null references auth.users(id) on delete cascade,
-  role          workspace_role not null default 'member',
-  joined_at     timestamptz not null default now(),
+-- ── workspace_members ───────────────────────────────────────
+create table if not exists workspace_members (
+  workspace_id uuid           not null references workspaces(id) on delete cascade,
+  user_id      uuid           not null references auth.users(id)  on delete cascade,
+  role         workspace_role not null default 'member',
+  joined_at    timestamptz    not null default now(),
   primary key (workspace_id, user_id)
 );
 
--- Auto-añadir creador como owner
-create or replace function handle_new_workspace()
-returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  insert into workspace_members (workspace_id, user_id, role)
-  values (new.id, new.created_by, 'owner');
-  return new;
-end;
-$$;
-
-create trigger on_workspace_created
-  after insert on workspaces
-  for each row execute procedure handle_new_workspace();
-
--- ============================================================
--- Projects
--- ============================================================
-create table projects (
-  id            uuid primary key default gen_random_uuid(),
-  workspace_id  uuid not null references workspaces(id) on delete cascade,
-  name          text not null,
-  icon          text not null default '📋',
-  created_by    uuid not null references auth.users(id),
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+-- ── projects ────────────────────────────────────────────────
+create table if not exists projects (
+  id           uuid primary key default uuid_generate_v4(),
+  workspace_id uuid        not null references workspaces(id) on delete cascade,
+  name         text        not null,
+  icon         text        not null default '📁',
+  created_by   uuid        not null references auth.users(id),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
 );
 
-create table project_members (
-  project_id  uuid not null references projects(id) on delete cascade,
-  user_id     uuid not null references auth.users(id) on delete cascade,
-  role        project_role not null default 'member',
-  joined_at   timestamptz not null default now(),
+-- ── project_members ─────────────────────────────────────────
+create table if not exists project_members (
+  project_id uuid         not null references projects(id) on delete cascade,
+  user_id    uuid         not null references auth.users(id) on delete cascade,
+  role       project_role not null default 'member',
+  joined_at  timestamptz  not null default now(),
   primary key (project_id, user_id)
 );
 
--- Auto-añadir creador como owner
-create or replace function handle_new_project()
-returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  insert into project_members (project_id, user_id, role)
-  values (new.id, new.created_by, 'owner');
-  return new;
-end;
-$$;
-
-create trigger on_project_created
-  after insert on projects
-  for each row execute procedure handle_new_project();
-
--- ============================================================
--- Labels (nivel workspace)
--- ============================================================
-create table labels (
-  id            uuid primary key default gen_random_uuid(),
-  workspace_id  uuid not null references workspaces(id) on delete cascade,
-  name          text not null,
-  light_color   text not null,
-  solid_color   text not null,
-  created_at    timestamptz not null default now()
+-- ── labels ──────────────────────────────────────────────────
+create table if not exists labels (
+  id           uuid primary key default uuid_generate_v4(),
+  workspace_id uuid        not null references workspaces(id) on delete cascade,
+  name         text        not null,
+  light_color  text        not null default '#EEF2FF',
+  solid_color  text        not null default '#4F46E5',
+  created_at   timestamptz not null default now()
 );
 
--- ============================================================
--- Folders y Kanban Lists
--- ============================================================
-create table folders (
-  id          uuid primary key default gen_random_uuid(),
-  project_id  uuid not null references projects(id) on delete cascade,
-  name        text not null,
-  position    integer not null default 0,
-  created_at  timestamptz not null default now()
+-- ── folders (kanban) ────────────────────────────────────────
+create table if not exists folders (
+  id         uuid primary key default uuid_generate_v4(),
+  project_id uuid        not null references projects(id) on delete cascade,
+  name       text        not null,
+  position   integer     not null default 0,
+  created_at timestamptz not null default now()
 );
 
-create table kanban_lists (
-  id          uuid primary key default gen_random_uuid(),
-  project_id  uuid not null references projects(id) on delete cascade,
-  folder_id   uuid references folders(id) on delete set null,
-  name        text not null,
-  color       text not null default '#6366f1',
-  wip_limit   integer,
-  position    integer not null default 0,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+-- ── kanban_lists ────────────────────────────────────────────
+create table if not exists kanban_lists (
+  id         uuid primary key default uuid_generate_v4(),
+  project_id uuid        not null references projects(id) on delete cascade,
+  folder_id  uuid        references folders(id) on delete set null,
+  name       text        not null,
+  color      text        not null default '#6366F1',
+  wip_limit  integer,
+  position   integer     not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
--- ============================================================
--- Tasks
--- ============================================================
-create table tasks (
-  id               uuid primary key default gen_random_uuid(),
-  list_id          uuid not null references kanban_lists(id) on delete cascade,
-  title            text not null,
+-- ── kanban_columns ──────────────────────────────────────────
+create table if not exists kanban_columns (
+  id         uuid primary key default uuid_generate_v4(),
+  list_id    uuid        not null references kanban_lists(id) on delete cascade,
+  name       text        not null,
+  color      text        not null default '#E0E7FF',
+  wip_limit  integer,
+  position   integer     not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ── tasks ───────────────────────────────────────────────────
+create table if not exists tasks (
+  id               uuid primary key default uuid_generate_v4(),
+  list_id          uuid        not null references kanban_lists(id) on delete cascade,
+  title            text        not null,
   description      text,
-  priority         priority not null default 'med',
+  priority         priority    not null default 'med',
   due_date         date,
-  is_completed     boolean not null default false,
-  attachment_count integer not null default 0,
-  comment_count    integer not null default 0,
-  position         integer not null default 0,
-  created_by       uuid not null references auth.users(id),
+  is_completed     boolean     not null default false,
+  attachment_count integer     not null default 0,
+  comment_count    integer     not null default 0,
+  estimation       text,
+  position         integer     not null default 0,
+  created_by       uuid        not null references auth.users(id),
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
 
-create table task_assignees (
-  task_id     uuid not null references tasks(id) on delete cascade,
-  user_id     uuid not null references auth.users(id) on delete cascade,
+-- ── task_assignees ──────────────────────────────────────────
+create table if not exists task_assignees (
+  task_id     uuid        not null references tasks(id) on delete cascade,
+  user_id     uuid        not null references auth.users(id) on delete cascade,
   assigned_at timestamptz not null default now(),
   primary key (task_id, user_id)
 );
 
-create table task_labels (
-  task_id   uuid not null references tasks(id) on delete cascade,
-  label_id  uuid not null references labels(id) on delete cascade,
+-- ── task_labels ─────────────────────────────────────────────
+create table if not exists task_labels (
+  task_id  uuid not null references tasks(id)   on delete cascade,
+  label_id uuid not null references labels(id)  on delete cascade,
   primary key (task_id, label_id)
 );
 
-create table subtasks (
-  id           uuid primary key default gen_random_uuid(),
-  task_id      uuid not null references tasks(id) on delete cascade,
-  title        text not null,
-  is_completed boolean not null default false,
-  position     integer not null default 0,
+-- ── subtasks ────────────────────────────────────────────────
+create table if not exists subtasks (
+  id           uuid primary key default uuid_generate_v4(),
+  task_id      uuid        not null references tasks(id) on delete cascade,
+  title        text        not null,
+  is_completed boolean     not null default false,
+  position     integer     not null default 0,
+  created_at   timestamptz not null default now()
+);
+
+-- ── task_comments ───────────────────────────────────────────
+create table if not exists task_comments (
+  id         uuid primary key default uuid_generate_v4(),
+  task_id    uuid        not null references tasks(id)        on delete cascade,
+  user_id    uuid        not null references auth.users(id)   on delete cascade,
+  body       text        not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ── task_attachments ────────────────────────────────────────
+create table if not exists task_attachments (
+  id           uuid primary key default uuid_generate_v4(),
+  task_id      uuid        not null references tasks(id)      on delete cascade,
+  created_by   uuid        not null references auth.users(id),
+  name         text        not null,
+  size_bytes   bigint      not null default 0,
+  mime_type    text        not null default 'application/octet-stream',
+  storage_path text        not null,
+  created_at   timestamptz not null default now()
+);
+
+-- ── document_folders ────────────────────────────────────────
+create table if not exists document_folders (
+  id           uuid primary key default uuid_generate_v4(),
+  workspace_id uuid        not null references workspaces(id) on delete cascade,
+  name         text        not null,
+  icon         text        not null default '📁',
+  created_at   timestamptz not null default now()
+);
+
+-- ── documents ───────────────────────────────────────────────
+create table if not exists documents (
+  id           uuid primary key default uuid_generate_v4(),
+  workspace_id uuid        not null references workspaces(id)         on delete cascade,
+  project_id   uuid        references projects(id)                    on delete set null,
+  folder_id    uuid        references document_folders(id)            on delete set null,
+  title        text        not null default 'Sin título',
+  content      text        default '<p>Empieza a escribir aquí...</p>',
+  icon         text        not null default '📄',
+  tags         text[]      not null default '{}',
+  created_by   uuid        not null references auth.users(id),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+-- ── document_comments ───────────────────────────────────────
+create table if not exists document_comments (
+  id          uuid primary key default uuid_generate_v4(),
+  document_id uuid        not null references documents(id)   on delete cascade,
+  author_id   uuid        not null references auth.users(id)  on delete cascade,
+  text        text        not null,
+  resolved    boolean     not null default false,
+  created_at  timestamptz not null default now()
+);
+
+-- ── messages ────────────────────────────────────────────────
+create table if not exists messages (
+  id           uuid primary key default uuid_generate_v4(),
+  workspace_id uuid        not null references workspaces(id)  on delete cascade,
+  sender_id    uuid        not null references auth.users(id)  on delete cascade,
+  recipient_id uuid        not null references auth.users(id)  on delete cascade,
+  content      text        not null,
+  read_at      timestamptz,
   created_at   timestamptz not null default now()
 );
 
 -- ============================================================
--- Documents
+-- STORAGE BUCKETS
 -- ============================================================
-create table documents (
-  id            uuid primary key default gen_random_uuid(),
-  workspace_id  uuid not null references workspaces(id) on delete cascade,
-  project_id    uuid references projects(id) on delete set null,
-  title         text not null default 'Untitled',
-  content       jsonb,
-  created_by    uuid not null references auth.users(id),
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
-);
+insert into storage.buckets (id, name, public)
+values ('doc-images', 'doc-images', true)
+on conflict (id) do nothing;
 
 -- ============================================================
--- Messages (DMs entre miembros del workspace)
+-- ROW LEVEL SECURITY (RLS)
 -- ============================================================
-create table messages (
-  id            uuid primary key default gen_random_uuid(),
-  workspace_id  uuid not null references workspaces(id) on delete cascade,
-  sender_id     uuid not null references auth.users(id),
-  recipient_id  uuid not null references auth.users(id),
-  content       text not null,
-  read_at       timestamptz,
-  created_at    timestamptz not null default now()
-);
 
--- ============================================================
--- Índices
--- ============================================================
-create index on workspace_members (user_id);
-create index on project_members (user_id);
-create index on projects (workspace_id);
-create index on kanban_lists (project_id);
-create index on tasks (list_id);
-create index on tasks (created_by);
-create index on task_assignees (user_id);
-create index on subtasks (task_id);
-create index on documents (workspace_id);
-create index on messages (workspace_id, sender_id, recipient_id);
-create index on messages (workspace_id, recipient_id) where read_at is null;
-
--- ============================================================
--- Row Level Security (RLS)
--- ============================================================
-alter table profiles          enable row level security;
-alter table workspaces        enable row level security;
-alter table workspace_members enable row level security;
-alter table projects          enable row level security;
-alter table project_members   enable row level security;
-alter table labels            enable row level security;
-alter table folders           enable row level security;
-alter table kanban_lists      enable row level security;
-alter table tasks             enable row level security;
-alter table task_assignees    enable row level security;
-alter table task_labels       enable row level security;
-alter table subtasks          enable row level security;
-alter table documents         enable row level security;
-alter table messages          enable row level security;
+alter table profiles           enable row level security;
+alter table workspaces         enable row level security;
+alter table workspace_members  enable row level security;
+alter table projects           enable row level security;
+alter table project_members    enable row level security;
+alter table labels             enable row level security;
+alter table folders            enable row level security;
+alter table kanban_lists       enable row level security;
+alter table kanban_columns     enable row level security;
+alter table tasks              enable row level security;
+alter table task_assignees     enable row level security;
+alter table task_labels        enable row level security;
+alter table subtasks           enable row level security;
+alter table task_comments      enable row level security;
+alter table task_attachments   enable row level security;
+alter table document_folders   enable row level security;
+alter table documents          enable row level security;
+alter table document_comments  enable row level security;
+alter table messages           enable row level security;
 
 -- Helper: ¿es el usuario miembro del workspace?
 create or replace function is_workspace_member(ws_id uuid)
-returns boolean language sql security definer set search_path = public as $$
+returns boolean language sql security definer as $$
   select exists (
     select 1 from workspace_members
     where workspace_id = ws_id and user_id = auth.uid()
   );
 $$;
 
--- Helper: ¿es el usuario miembro del proyecto?
-create or replace function is_project_member(proj_id uuid)
-returns boolean language sql security definer set search_path = public as $$
-  select exists (
-    select 1 from project_members
-    where project_id = proj_id and user_id = auth.uid()
-  );
-$$;
+-- profiles
+create policy "profiles_select" on profiles for select using (true);
+create policy "profiles_update" on profiles for update using (id = auth.uid());
 
--- Profiles
-create policy "Users can view profiles in their workspaces"
-  on profiles for select using (
-    exists (
-      select 1 from workspace_members wm1
-      join workspace_members wm2 on wm1.workspace_id = wm2.workspace_id
-      where wm1.user_id = auth.uid() and wm2.user_id = profiles.id
-    )
-  );
-create policy "Users can update own profile"
-  on profiles for update using (id = auth.uid());
+-- workspaces
+create policy "workspaces_select" on workspaces for select using (is_workspace_member(id));
+create policy "workspaces_insert" on workspaces for insert with check (created_by = auth.uid());
+create policy "workspaces_update" on workspaces for update using (
+  exists (select 1 from workspace_members where workspace_id = id and user_id = auth.uid() and role in ('owner','admin'))
+);
 
--- Workspaces
-create policy "Members can view workspaces"
-  on workspaces for select using (is_workspace_member(id));
-create policy "Authenticated users can create workspaces"
-  on workspaces for insert with check (created_by = auth.uid());
-create policy "Owners and admins can update workspaces"
-  on workspaces for update using (
-    exists (
-      select 1 from workspace_members
-      where workspace_id = id and user_id = auth.uid()
-        and role in ('owner', 'admin')
-    )
-  );
+-- workspace_members
+create policy "wm_select" on workspace_members for select using (is_workspace_member(workspace_id));
+create policy "wm_insert" on workspace_members for insert with check (
+  exists (select 1 from workspace_members wm2 where wm2.workspace_id = workspace_id and wm2.user_id = auth.uid() and wm2.role in ('owner','admin'))
+  or (user_id = auth.uid()) -- auto-join al crear workspace
+);
+create policy "wm_delete" on workspace_members for delete using (
+  user_id = auth.uid() or
+  exists (select 1 from workspace_members wm2 where wm2.workspace_id = workspace_id and wm2.user_id = auth.uid() and wm2.role in ('owner','admin'))
+);
 
--- Workspace members
-create policy "Members can view workspace members"
-  on workspace_members for select using (is_workspace_member(workspace_id));
-create policy "Owners can manage workspace members"
-  on workspace_members for all using (
-    exists (
-      select 1 from workspace_members
-      where workspace_id = workspace_members.workspace_id
-        and user_id = auth.uid() and role = 'owner'
-    )
-  );
+-- projects
+create policy "projects_all" on projects for all using (is_workspace_member(workspace_id));
 
--- Projects
-create policy "Workspace members can view projects"
-  on projects for select using (is_workspace_member(workspace_id));
-create policy "Workspace members can create projects"
-  on projects for insert with check (is_workspace_member(workspace_id) and created_by = auth.uid());
-create policy "Project owners and admins can update projects"
-  on projects for update using (is_project_member(id));
-create policy "Project owners can delete projects"
-  on projects for delete using (
-    exists (
-      select 1 from project_members
-      where project_id = id and user_id = auth.uid() and role = 'owner'
-    )
-  );
+-- project_members
+create policy "pm_all" on project_members for all using (
+  exists (select 1 from projects p where p.id = project_id and is_workspace_member(p.workspace_id))
+);
 
--- Project members
-create policy "Project members can view project members"
-  on project_members for select using (is_project_member(project_id));
-create policy "Project owners can manage project members"
-  on project_members for all using (
-    exists (
-      select 1 from project_members pm
-      where pm.project_id = project_members.project_id
-        and pm.user_id = auth.uid() and pm.role = 'owner'
-    )
-  );
+-- labels
+create policy "labels_all" on labels for all using (is_workspace_member(workspace_id));
 
--- Labels
-create policy "Workspace members can manage labels"
-  on labels for all using (is_workspace_member(workspace_id));
+-- folders (kanban)
+create policy "folders_all" on folders for all using (
+  exists (select 1 from projects p where p.id = project_id and is_workspace_member(p.workspace_id))
+);
 
--- Folders
-create policy "Project members can manage folders"
-  on folders for all using (is_project_member(project_id));
+-- kanban_lists
+create policy "kanban_lists_all" on kanban_lists for all using (
+  exists (select 1 from projects p where p.id = project_id and is_workspace_member(p.workspace_id))
+);
 
--- Kanban lists
-create policy "Project members can manage kanban lists"
-  on kanban_lists for all using (is_project_member(project_id));
+-- kanban_columns
+create policy "kanban_columns_all" on kanban_columns for all using (
+  exists (
+    select 1 from kanban_lists kl join projects p on p.id = kl.project_id
+    where kl.id = list_id and is_workspace_member(p.workspace_id)
+  )
+);
 
--- Tasks
-create policy "Project members can view tasks"
-  on tasks for select using (
-    exists (
-      select 1 from kanban_lists kl
-      where kl.id = tasks.list_id and is_project_member(kl.project_id)
-    )
-  );
-create policy "Project members can create tasks"
-  on tasks for insert with check (
-    exists (
-      select 1 from kanban_lists kl
-      where kl.id = list_id and is_project_member(kl.project_id)
-    ) and created_by = auth.uid()
-  );
-create policy "Project members can update tasks"
-  on tasks for update using (
-    exists (
-      select 1 from kanban_lists kl
-      where kl.id = tasks.list_id and is_project_member(kl.project_id)
-    )
-  );
-create policy "Task creator or project owner can delete tasks"
-  on tasks for delete using (created_by = auth.uid());
+-- tasks
+create policy "tasks_all" on tasks for all using (
+  exists (
+    select 1 from kanban_lists kl join projects p on p.id = kl.project_id
+    where kl.id = list_id and is_workspace_member(p.workspace_id)
+  )
+);
 
--- Task assignees
-create policy "Project members can manage task assignees"
-  on task_assignees for all using (
-    exists (
-      select 1 from tasks t
-      join kanban_lists kl on kl.id = t.list_id
-      where t.id = task_assignees.task_id and is_project_member(kl.project_id)
-    )
-  );
+-- task_assignees
+create policy "task_assignees_all" on task_assignees for all using (
+  exists (
+    select 1 from tasks t join kanban_lists kl on kl.id = t.list_id join projects p on p.id = kl.project_id
+    where t.id = task_id and is_workspace_member(p.workspace_id)
+  )
+);
 
--- Task labels
-create policy "Project members can manage task labels"
-  on task_labels for all using (
-    exists (
-      select 1 from tasks t
-      join kanban_lists kl on kl.id = t.list_id
-      where t.id = task_labels.task_id and is_project_member(kl.project_id)
-    )
-  );
+-- task_labels
+create policy "task_labels_all" on task_labels for all using (
+  exists (
+    select 1 from tasks t join kanban_lists kl on kl.id = t.list_id join projects p on p.id = kl.project_id
+    where t.id = task_id and is_workspace_member(p.workspace_id)
+  )
+);
 
--- Subtasks
-create policy "Project members can manage subtasks"
-  on subtasks for all using (
-    exists (
-      select 1 from tasks t
-      join kanban_lists kl on kl.id = t.list_id
-      where t.id = subtasks.task_id and is_project_member(kl.project_id)
-    )
-  );
+-- subtasks
+create policy "subtasks_all" on subtasks for all using (
+  exists (
+    select 1 from tasks t join kanban_lists kl on kl.id = t.list_id join projects p on p.id = kl.project_id
+    where t.id = task_id and is_workspace_member(p.workspace_id)
+  )
+);
 
--- Documents
-create policy "Workspace members can manage documents"
-  on documents for all using (is_workspace_member(workspace_id));
+-- task_comments
+create policy "task_comments_all" on task_comments for all using (
+  exists (
+    select 1 from tasks t join kanban_lists kl on kl.id = t.list_id join projects p on p.id = kl.project_id
+    where t.id = task_id and is_workspace_member(p.workspace_id)
+  )
+);
 
--- Messages
-create policy "Users can view their own messages"
-  on messages for select using (
-    sender_id = auth.uid() or recipient_id = auth.uid()
-  );
-create policy "Users can send messages in their workspaces"
-  on messages for insert with check (
-    sender_id = auth.uid() and is_workspace_member(workspace_id)
-  );
-create policy "Recipients can mark messages as read"
-  on messages for update using (recipient_id = auth.uid());
+-- task_attachments
+create policy "task_attachments_all" on task_attachments for all using (
+  exists (
+    select 1 from tasks t join kanban_lists kl on kl.id = t.list_id join projects p on p.id = kl.project_id
+    where t.id = task_id and is_workspace_member(p.workspace_id)
+  )
+);
+
+-- document_folders
+create policy "document_folders_all" on document_folders for all using (is_workspace_member(workspace_id));
+
+-- documents
+create policy "documents_all" on documents for all using (is_workspace_member(workspace_id));
+
+-- document_comments
+create policy "document_comments_all" on document_comments for all using (
+  exists (select 1 from documents d where d.id = document_id and is_workspace_member(d.workspace_id))
+);
+
+-- messages
+create policy "messages_select" on messages for select using (sender_id = auth.uid() or recipient_id = auth.uid());
+create policy "messages_insert" on messages for insert with check (sender_id = auth.uid());
+
+-- Storage: doc-images
+create policy "doc_images_select" on storage.objects for select using (bucket_id = 'doc-images');
+create policy "doc_images_insert" on storage.objects for insert with check (bucket_id = 'doc-images' and auth.role() = 'authenticated');
+create policy "doc_images_delete" on storage.objects for delete using (bucket_id = 'doc-images' and owner = auth.uid());
 
 -- ============================================================
--- updated_at automático
+-- ÍNDICES
 -- ============================================================
-create or replace function set_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-create trigger set_updated_at before update on profiles
-  for each row execute procedure set_updated_at();
-create trigger set_updated_at before update on workspaces
-  for each row execute procedure set_updated_at();
-create trigger set_updated_at before update on projects
-  for each row execute procedure set_updated_at();
-create trigger set_updated_at before update on kanban_lists
-  for each row execute procedure set_updated_at();
-create trigger set_updated_at before update on tasks
-  for each row execute procedure set_updated_at();
-create trigger set_updated_at before update on documents
-  for each row execute procedure set_updated_at();
+create index if not exists idx_workspace_members_user     on workspace_members(user_id);
+create index if not exists idx_workspace_members_ws       on workspace_members(workspace_id);
+create index if not exists idx_documents_workspace        on documents(workspace_id);
+create index if not exists idx_documents_folder           on documents(folder_id);
+create index if not exists idx_document_comments_document on document_comments(document_id);
+create index if not exists idx_tasks_list                 on tasks(list_id);
+create index if not exists idx_messages_workspace         on messages(workspace_id);
+create index if not exists idx_messages_sender            on messages(sender_id);
+create index if not exists idx_messages_recipient         on messages(recipient_id);

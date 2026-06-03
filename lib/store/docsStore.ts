@@ -142,8 +142,8 @@ export const useDocsStore = create<DocsState>((set, get) => ({
     const { data: rawComments } = docIds.length > 0
       ? await supabase
           .from("document_comments")
-          .select("id, doc_id, author_id, text, resolved, created_at")
-          .in("doc_id", docIds)
+          .select("id, document_id, author_id, text, resolved, created_at")
+          .in("document_id", docIds)
       : { data: [] };
 
     // Load commenter profiles
@@ -155,9 +155,9 @@ export const useDocsStore = create<DocsState>((set, get) => ({
 
     const docs: Doc[] = (rawDocs ?? []).map((d) => {
       const comments: DocComment[] = ((rawComments ?? []) as Array<{
-        id: string; doc_id: string; author_id: string; text: string; resolved: boolean; created_at: string;
+        id: string; document_id: string; author_id: string; text: string; resolved: boolean; created_at: string;
       }>)
-        .filter((c) => c.doc_id === d.id)
+        .filter((c) => c.document_id === d.id)
         .map((c) => {
           const p = profileMap.get(c.author_id);
           return {
