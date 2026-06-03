@@ -324,6 +324,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
         ? prev.filter((a) => a.id !== member.id)
         : [...prev, { id: member.id, name: member.name, avatar: member.avatar }];
       setTaskAssignees(taskId, next.map((a) => a.id));
+      updateTaskInStore(taskId, { assignees: next });
       return next;
     });
   };
