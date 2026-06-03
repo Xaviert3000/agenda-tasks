@@ -367,6 +367,28 @@ export default function DocEditorPage() {
     triggerSave();
   }, [triggerSave]);
 
+  /* Compress image via canvas before uploading (max 1920px, 0.82 quality) */
+  const compressImage = (file: File): Promise<Blob> =>
+    new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1920;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => resolve(blob ?? file), "image/webp", 0.82);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+
   /* ── File / image insert handlers ── */
   const handleImageFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -374,8 +396,7 @@ export default function DocEditorPage() {
     e.target.value = "";
 
     const supabase = createClient();
-    const ext = file.name.split(".").pop() ?? "png";
-    const path = `${docId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const path = `${docId}/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
 
     // Show placeholder while uploading
     const placeholderId = `img-placeholder-${Date.now()}`;
@@ -383,7 +404,8 @@ export default function DocEditorPage() {
       `<p id="${placeholderId}" style="color:#9CA3AF;font-size:13px">⏳ Subiendo imagen...</p>`
     );
 
-    const { error } = await supabase.storage.from("doc-images").upload(path, file, { contentType: file.type });
+    const compressed = await compressImage(file);
+    const { error } = await supabase.storage.from("doc-images").upload(path, compressed, { contentType: "image/webp" });
     const placeholder = document.getElementById(placeholderId);
 
     if (error || !placeholder) {
