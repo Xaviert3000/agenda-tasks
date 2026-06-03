@@ -24,9 +24,11 @@ type KanbanState = {
   lists: KanbanList[];
   projectName: string;
   projectIcon: string;
+  listName: string;
   searchQuery: string;
   taskFilters: TaskFilters;
   setProjectMeta: (name: string, icon: string) => void;
+  setListName: (name: string) => void;
   setLists: (updater: Updater<KanbanList[]>) => void;
   addTask: (listId: string, title: string, priority?: Priority) => void;
   moveTask: (taskId: string, newListId: string) => void;
@@ -40,9 +42,11 @@ export const useKanbanStore = create<KanbanState>((set, get) => ({
   lists: [],
   projectName: "",
   projectIcon: "📋",
+  listName: "",
   searchQuery: "",
   taskFilters: DEFAULT_FILTERS,
   setProjectMeta: (name, icon) => set({ projectName: name, projectIcon: icon }),
+  setListName: (name) => set({ listName: name }),
   setSearchQuery: (q) => set({ searchQuery: q }),
   setTaskFilters: (f) => set({ taskFilters: f }),
   clearFilters: () => set({ searchQuery: "", taskFilters: DEFAULT_FILTERS }),

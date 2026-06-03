@@ -18,6 +18,7 @@ const VIEW_LABELS: Record<string, string> = {
 export function TopbarWrapper({ workspace }: TopbarWrapperProps) {
   const pathname    = usePathname();
   const projectName = useKanbanStore((s) => s.projectName);
+  const listName    = useKanbanStore((s) => s.listName);
 
   /* ── Bandeja de entrada ── */
   if (pathname.includes("/inbox")) {
@@ -93,19 +94,14 @@ export function TopbarWrapper({ workspace }: TopbarWrapperProps) {
     const viewLabel   = VIEW_LABELS[view] ?? view;
     const displayName = projectName || "Proyecto";
 
-    return (
-      <Topbar
-        workspace={workspace}
-        breadcrumbs={[
-          { label: "Proyectos", href: `/${workspace}/dashboard` },
-          {
-            label: displayName,
-            href: `/${workspace}/projects/${projectId}/kanban`,
-          },
-          { label: viewLabel },
-        ]}
-      />
-    );
+    const crumbs = [
+      { label: "Proyectos", href: `/${workspace}/dashboard` },
+      { label: displayName, href: `/${workspace}/dashboard` },
+      ...(listName ? [{ label: listName, href: `/${workspace}/projects/${projectId}/kanban` }] : []),
+      { label: viewLabel },
+    ];
+
+    return <Topbar workspace={workspace} breadcrumbs={crumbs} />;
   }
 
   return <Topbar workspace={workspace} />;

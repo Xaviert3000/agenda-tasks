@@ -39,6 +39,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
   const setLists       = useKanbanStore((s) => s.setLists);
   const setProjectMeta = useKanbanStore((s) => s.setProjectMeta);
+  const setListName    = useKanbanStore((s) => s.setListName);
   const searchQuery    = useKanbanStore((s) => s.searchQuery);
   const taskFilters    = useKanbanStore((s) => s.taskFilters);
   const setSearchQuery = useKanbanStore((s) => s.setSearchQuery);
@@ -52,13 +53,14 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      // Get project via the list ID
+      // Get project and list name via the list ID
       const { data: list } = await supabase
         .from("kanban_lists")
-        .select("project_id")
+        .select("project_id, name")
         .eq("id", listId)
         .single();
       if (!list) return;
+      setListName(list.name);
       const { data: proj } = await supabase
         .from("projects")
         .select("name, icon")
