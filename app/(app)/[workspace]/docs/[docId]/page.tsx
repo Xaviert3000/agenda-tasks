@@ -7,6 +7,7 @@ import {
   Trash2, Check, Clock, Tag, MessageSquare, X, Send, CheckCheck,
 } from "lucide-react";
 import { useDocsStore } from "@/lib/store/docsStore";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 /* ══════════════════════════════════════════════
@@ -120,34 +121,7 @@ function tagColor(tag: string) {
   return TAG_COLORS[idx];
 }
 
-/* ── Team members for @@ mentions ── */
-const TEAM_MEMBERS = [
-  {
-    id: "michael",
-    name: "Michael Anderson",
-    role: "Developer",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=michael&backgroundColor=b6e3f4",
-  },
-  {
-    id: "sophia",
-    name: "Sofía Carter",
-    role: "Designer",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=sophia&backgroundColor=ffd5dc",
-  },
-  {
-    id: "daniel",
-    name: "Daniel Johnson",
-    role: "Developer",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=daniel&backgroundColor=c0aede",
-  },
-  {
-    id: "emma",
-    name: "Emma Wilson",
-    role: "Project Manager",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=emma&backgroundColor=d1fae5",
-  },
-];
-type TeamMember = typeof TEAM_MEMBERS[0];
+type TeamMember = { id: string; name: string; role: string; avatar: string };
 
 /* ── Render @mentions with highlight ── */
 function renderMentionText(text: string): React.ReactNode[] {
@@ -196,6 +170,30 @@ export default function DocEditorPage() {
   const [newTag,         setNewTag]         = useState("");
   const [newComment,     setNewComment]     = useState("");
   const [showResolved,   setShowResolved]   = useState(false);
+
+  // ── Workspace members for @@ mentions ──
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      const { data: ws } = await supabase.from("workspaces").select("id").eq("slug", workspace).single();
+      if (!ws) return;
+      const { data } = await supabase
+        .from("workspace_members")
+        .select("user_id, profiles(id, name, avatar_url)")
+        .eq("workspace_id", ws.id);
+      const mapped: TeamMember[] = (data ?? []).map((m) => {
+        const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+        return {
+          id: p?.id ?? m.user_id,
+          name: p?.name ?? "Usuario",
+          role: "",
+          avatar: p?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${m.user_id}`,
+        };
+      });
+      setTeamMembers(mapped);
+    })();
+  }, [workspace]);
 
   // ── @@ mention menu state (comment textarea) ──
   interface MentionState { query: string; atPos: number; }
@@ -490,7 +488,7 @@ export default function DocEditorPage() {
       // Allow only name-like characters (letters, accents, spaces)
       if (/^[A-Za-záéíóúñÑüÜ\s]*$/.test(query) && query.length <= 40) {
         const q = query.toLowerCase().trim();
-        const matches = TEAM_MEMBERS.filter((m) =>
+        const matches = teamMembers.filter((m) =>
           !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q)
         );
         if (matches.length > 0) {
@@ -522,7 +520,7 @@ export default function DocEditorPage() {
 
   /* Filtered members based on current mention query */
   const filteredMembers = mentionMenu
-    ? TEAM_MEMBERS.filter((m) => {
+    ? teamMembers.filter((m) => {
         const q = mentionMenu.query.toLowerCase().trim();
         return !q || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
       })
