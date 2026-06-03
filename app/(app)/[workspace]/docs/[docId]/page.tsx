@@ -205,12 +205,19 @@ export default function DocEditorPage() {
     (async () => {
       const { data: ws } = await supabase.from("workspaces").select("id").eq("slug", workspace).single();
       if (!ws) return;
-      const { data } = await supabase
+      const { data: members } = await supabase
         .from("workspace_members")
-        .select("user_id, profiles(id, name, avatar_url)")
+        .select("user_id")
         .eq("workspace_id", ws.id);
-      const mapped: TeamMember[] = (data ?? []).map((m) => {
-        const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+      if (!members || members.length === 0) return;
+      const userIds = members.map((m) => m.user_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, avatar_url")
+        .in("id", userIds);
+      const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+      const mapped: TeamMember[] = members.map((m) => {
+        const p = profileMap.get(m.user_id);
         return {
           id: p?.id ?? m.user_id,
           name: p?.name ?? "Usuario",
