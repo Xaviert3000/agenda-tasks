@@ -149,7 +149,7 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES (
   'task-attachments',
   'task-attachments',
-  false,
+  true,
   26214400,   -- 25 MB
   ARRAY['image/png','image/jpeg','image/gif','image/webp','image/svg+xml',
         'application/pdf','video/mp4','audio/mpeg',
