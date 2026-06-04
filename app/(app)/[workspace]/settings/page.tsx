@@ -178,12 +178,11 @@ export default function SettingsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("name, avatar_url, bio")
+        .select("name, avatar_url")
         .eq("id", user.id)
         .single();
       if (profile?.name)       setName(profile.name);
       if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
-      if ((profile as { bio?: string } | null)?.bio) setBio((profile as { bio?: string }).bio ?? "");
 
       // Load workspace id + members
       const { data: ws } = await supabase
