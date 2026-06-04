@@ -109,11 +109,8 @@ export default function SettingsPage() {
   const [inviteRole,  setInviteRole]  = useState("Miembro");
   const [inviteSent,  setInviteSent]  = useState(false);
 
-  interface PendingInvite { email: string; role: string; sentAt: string; }
-  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(() => {
-    if (typeof window === "undefined") return [];
-    try { return JSON.parse(localStorage.getItem("pending_invites") ?? "[]"); } catch { return []; }
-  });
+  interface PendingInvite { id: string; email: string; role: string; sentAt: string; }
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [resentEmail, setResentEmail] = useState<string | null>(null);
 
   /* Seguridad */
@@ -234,6 +231,43 @@ export default function SettingsPage() {
         .select("id", { count: "exact", head: true })
         .eq("workspace_id", ws.id);
       setUsageProjects(projCount ?? 0);
+
+      // Load pending invitations
+      const { data: invites } = await supabase
+        .from("workspace_invitations")
+        .select("id, email, role, sent_at")
+        .eq("workspace_id", ws.id)
+        .order("sent_at", { ascending: false });
+
+      const roleDisplayMap: Record<string, string> = { owner: "Admin", admin: "Admin", member: "Miembro", moderator: "Moderador" };
+      setPendingInvites((invites ?? []).map((i) => ({
+        id: i.id,
+        email: i.email,
+        role: roleDisplayMap[i.role] ?? i.role,
+        sentAt: i.sent_at,
+      })));
+
+      // Realtime subscription for invitations
+      supabase
+        .channel(`invitations:${ws.id}`)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "workspace_invitations",
+          filter: `workspace_id=eq.${ws.id}`,
+        }, (payload) => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const i = payload.new as { id: string; email: string; role: string; sent_at: string };
+            setPendingInvites((prev) => {
+              const filtered = prev.filter((p) => p.id !== i.id);
+              return [{ id: i.id, email: i.email, role: roleDisplayMap[i.role] ?? i.role, sentAt: i.sent_at }, ...filtered];
+            });
+          } else if (payload.eventType === "DELETE") {
+            const id = (payload.old as { id: string }).id;
+            setPendingInvites((prev) => prev.filter((p) => p.id !== id));
+          }
+        })
+        .subscribe();
     })();
   }, [workspace]);
 
@@ -786,12 +820,15 @@ export default function SettingsPage() {
             <option value="Admin">Administrador</option>
           </select>
           <button
-            onClick={() => {
-              if (!inviteEmail) return;
-              const newInvite: PendingInvite = { email: inviteEmail, role: inviteRole, sentAt: new Date().toISOString() };
-              const updated = [...pendingInvites.filter(i => i.email !== inviteEmail), newInvite];
-              setPendingInvites(updated);
-              localStorage.setItem("pending_invites", JSON.stringify(updated));
+            onClick={async () => {
+              if (!inviteEmail || !workspaceId) return;
+              const supabase = createClient();
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) return;
+              const roleDbMap: Record<string, string> = { Miembro: "member", Moderador: "moderator", Admin: "admin" };
+              await supabase
+                .from("workspace_invitations")
+                .upsert({ workspace_id: workspaceId, email: inviteEmail, role: roleDbMap[inviteRole] ?? "member", invited_by: user.id, sent_at: new Date().toISOString() }, { onConflict: "workspace_id,email" });
               setInviteSent(true);
               setInviteEmail("");
               setTimeout(() => setInviteSent(false), 3000);
@@ -852,11 +889,14 @@ export default function SettingsPage() {
                 </div>
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 mr-2">Pendiente</span>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    if (!workspaceId) return;
+                    const supabase = createClient();
+                    await supabase
+                      .from("workspace_invitations")
+                      .update({ sent_at: new Date().toISOString() })
+                      .eq("id", inv.id);
                     setResentEmail(inv.email);
-                    const updated = pendingInvites.map(i => i.email === inv.email ? { ...i, sentAt: new Date().toISOString() } : i);
-                    setPendingInvites(updated);
-                    localStorage.setItem("pending_invites", JSON.stringify(updated));
                     setTimeout(() => setResentEmail(null), 2500);
                   }}
                   className={cn(
@@ -869,10 +909,9 @@ export default function SettingsPage() {
                   {resentEmail === inv.email ? <><Check className="w-3 h-3 inline mr-1" />Reenviado</> : "Reenviar"}
                 </button>
                 <button
-                  onClick={() => {
-                    const updated = pendingInvites.filter(i => i.email !== inv.email);
-                    setPendingInvites(updated);
-                    localStorage.setItem("pending_invites", JSON.stringify(updated));
+                  onClick={async () => {
+                    const supabase = createClient();
+                    await supabase.from("workspace_invitations").delete().eq("id", inv.id);
                   }}
                   className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors whitespace-nowrap"
                 >
