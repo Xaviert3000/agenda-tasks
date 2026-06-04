@@ -109,6 +109,13 @@ export default function SettingsPage() {
   const [inviteRole,  setInviteRole]  = useState("Miembro");
   const [inviteSent,  setInviteSent]  = useState(false);
 
+  interface PendingInvite { email: string; role: string; sentAt: string; }
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem("pending_invites") ?? "[]"); } catch { return []; }
+  });
+  const [resentEmail, setResentEmail] = useState<string | null>(null);
+
   /* Seguridad */
   const [twoFactor, setTwoFactor] = useState(false);
 
@@ -779,7 +786,16 @@ export default function SettingsPage() {
             <option value="Admin">Administrador</option>
           </select>
           <button
-            onClick={() => { if (inviteEmail) { setInviteSent(true); setInviteEmail(""); setTimeout(() => setInviteSent(false), 3000); } }}
+            onClick={() => {
+              if (!inviteEmail) return;
+              const newInvite: PendingInvite = { email: inviteEmail, role: inviteRole, sentAt: new Date().toISOString() };
+              const updated = [...pendingInvites.filter(i => i.email !== inviteEmail), newInvite];
+              setPendingInvites(updated);
+              localStorage.setItem("pending_invites", JSON.stringify(updated));
+              setInviteSent(true);
+              setInviteEmail("");
+              setTimeout(() => setInviteSent(false), 3000);
+            }}
             className={cn(
               "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
               inviteSent ? "bg-success text-white" : "bg-[#2F3988] hover:bg-[#3d4aa8] text-white"
@@ -813,6 +829,60 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* Pending invitations */}
+      {pendingInvites.length > 0 && (
+        <div className="border border-amber-200 bg-amber-50/40 rounded-xl divide-y divide-amber-100 overflow-hidden">
+          <div className="px-5 py-3 flex items-center justify-between">
+            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Invitaciones pendientes ({pendingInvites.length})</p>
+          </div>
+          {pendingInvites.map((inv) => {
+            const sentDate = new Date(inv.sentAt);
+            const diffMs = Date.now() - sentDate.getTime();
+            const diffMin = Math.floor(diffMs / 60000);
+            const timeAgo = diffMin < 1 ? "Hace un momento" : diffMin < 60 ? `Hace ${diffMin} min` : diffMin < 1440 ? `Hace ${Math.floor(diffMin/60)}h` : `Hace ${Math.floor(diffMin/1440)}d`;
+            return (
+              <div key={inv.email} className="flex items-center gap-3 px-5 py-3.5">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-xs font-bold text-amber-600">
+                  {inv.email.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{inv.email}</p>
+                  <p className="text-xs text-gray-400">{timeAgo} · Invitado como {inv.role}</p>
+                </div>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 mr-2">Pendiente</span>
+                <button
+                  onClick={() => {
+                    setResentEmail(inv.email);
+                    const updated = pendingInvites.map(i => i.email === inv.email ? { ...i, sentAt: new Date().toISOString() } : i);
+                    setPendingInvites(updated);
+                    localStorage.setItem("pending_invites", JSON.stringify(updated));
+                    setTimeout(() => setResentEmail(null), 2500);
+                  }}
+                  className={cn(
+                    "text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap mr-1",
+                    resentEmail === inv.email
+                      ? "border-green-200 bg-green-50 text-green-600"
+                      : "border-[#2F3988]/30 text-[#2F3988] hover:bg-[#2F3988]/5"
+                  )}
+                >
+                  {resentEmail === inv.email ? <><Check className="w-3 h-3 inline mr-1" />Reenviado</> : "Reenviar"}
+                </button>
+                <button
+                  onClick={() => {
+                    const updated = pendingInvites.filter(i => i.email !== inv.email);
+                    setPendingInvites(updated);
+                    localStorage.setItem("pending_invites", JSON.stringify(updated));
+                  }}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors whitespace-nowrap"
+                >
+                  Cancelar
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* List */}
       <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
