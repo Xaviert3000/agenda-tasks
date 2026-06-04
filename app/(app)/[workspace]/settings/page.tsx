@@ -825,7 +825,7 @@ export default function SettingsPage() {
               const supabase = createClient();
               const { data: { user } } = await supabase.auth.getUser();
               if (!user) return;
-              const roleDbMap: Record<string, string> = { Miembro: "member", Moderador: "moderator", Admin: "admin" };
+              const roleDbMap: Record<string, "owner" | "admin" | "member"> = { Miembro: "member", Moderador: "member", Admin: "admin" };
               await supabase
                 .from("workspace_invitations")
                 .upsert({ workspace_id: workspaceId, email: inviteEmail, role: roleDbMap[inviteRole] ?? "member", invited_by: user.id, sent_at: new Date().toISOString() }, { onConflict: "workspace_id,email" });
