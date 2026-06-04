@@ -8,9 +8,11 @@ import {
   MessageSquare,
   ChevronRight,
   Search,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SearchModal } from "./SearchModal";
+import { NotepadPanel } from "./NotepadPanel";
 
 const NOTIF_UNREAD  = 0;
 const MSGS_UNREAD   = 0;
@@ -27,6 +29,7 @@ interface TopbarProps {
 
 export function Topbar({ workspace, breadcrumbs = [] }: TopbarProps) {
   const [showSearch, setShowSearch] = useState(false);
+  const [showNotepad, setShowNotepad] = useState(false);
   const pathname = usePathname();
   const isInbox    = pathname.includes("/inbox");
   const isMessages = pathname.includes("/messages");
@@ -117,6 +120,21 @@ export function Topbar({ workspace, breadcrumbs = [] }: TopbarProps) {
             )}
           </Link>
 
+          {/* Notepad */}
+          <button
+            onClick={() => setShowNotepad((v) => !v)}
+            className={cn(
+              "relative w-8 h-8 flex items-center justify-center rounded-md transition-colors",
+              showNotepad
+                ? "bg-[#2F3988]/10 text-[#2F3988]"
+                : "hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            )}
+            aria-label="Bloc de notas"
+            title="Bloc de notas"
+          >
+            <BookOpen className="w-4 h-4" />
+          </button>
+
           {/* Messages */}
           <Link
             href={`/${workspace}/messages`}
@@ -152,6 +170,11 @@ export function Topbar({ workspace, breadcrumbs = [] }: TopbarProps) {
       {/* Search modal */}
       {showSearch && (
         <SearchModal workspace={workspace} onClose={() => setShowSearch(false)} />
+      )}
+
+      {/* Notepad panel */}
+      {showNotepad && (
+        <NotepadPanel onClose={() => setShowNotepad(false)} />
       )}
     </>
   );
