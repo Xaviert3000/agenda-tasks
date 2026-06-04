@@ -272,6 +272,36 @@ export default function SettingsPage() {
           }
         })
         .subscribe();
+
+      // Realtime subscription for new workspace members (e.g. when an invite is accepted)
+      supabase
+        .channel(`members:${ws.id}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "workspace_members",
+          filter: `workspace_id=eq.${ws.id}`,
+        }, async (payload) => {
+          const newMember = payload.new as { user_id: string; role: string };
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id, name, avatar_url")
+            .eq("id", newMember.user_id)
+            .single();
+          const roleMap: Record<string, string> = { owner: "Admin", admin: "Admin", member: "Miembro", moderator: "Moderador" };
+          setTeam((prev) => {
+            if (prev.find((m) => m.id === newMember.user_id)) return prev;
+            return [...prev, {
+              id: profile?.id ?? newMember.user_id,
+              name: profile?.name ?? "Usuario",
+              email: "",
+              role: roleMap[newMember.role] ?? "Miembro",
+              avatar_url: profile?.avatar_url ?? null,
+            }];
+          });
+          setUsageUsers((prev) => prev + 1);
+        })
+        .subscribe();
     })();
   }, [workspace]);
 
