@@ -307,7 +307,7 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
 
   const fileIcon = (type: string) => {
     if (type.startsWith("image/")) return <FileImage className="w-5 h-5 text-blue-400" />;
-    if (type === "pdf") return <FileText className="w-5 h-5 text-red-400" />;
+    if (type === "application/pdf" || type === "pdf") return <FileText className="w-5 h-5 text-red-400" />;
     if (type.startsWith("video/")) return <Film className="w-5 h-5 text-purple-400" />;
     if (type.startsWith("audio/")) return <Music className="w-5 h-5 text-green-400" />;
     if (type === "figma") return <span className="text-base leading-none">🎨</span>;
@@ -761,14 +761,14 @@ export function TaskDrawer({ task, onClose, onStatusChange, projectName, project
                         title="Ver archivo"
                         disabled={!file.url}
                       >
-                        {file.url ? (
+                        {file.url && file.type.startsWith("image/") ? (
                           <img
                             src={file.url}
                             alt={file.name}
                             className="w-12 h-10 rounded-lg object-cover border border-gray-200 hover:opacity-80 transition-opacity"
                           />
                         ) : (
-                          <div className="w-12 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center">
+                          <div className="w-12 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:opacity-80 transition-opacity">
                             {fileIcon(file.type)}
                           </div>
                         )}
