@@ -191,12 +191,7 @@ export function NotepadPanel({ workspace, onClose }: NotepadPanelProps) {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-              <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                <span className="text-[#2F3988] font-medium">1</span>
-                <span className="text-red-400 font-medium">2</span>
-                <span className="text-red-400 font-medium">3</span>
-              </div>
+            <div className="flex items-center justify-end px-4 py-2 border-t border-gray-100 bg-gray-50 flex-shrink-0">
               <div className="flex items-center gap-1">
                 <button onClick={handlePrint} title="Imprimir" className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-200 text-gray-500 transition-colors">
                   <Printer className="w-3.5 h-3.5" />
