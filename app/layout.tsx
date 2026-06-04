@@ -21,8 +21,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "agenda-tasks — Gestión de tareas",
-  description: "Plataforma de gestión de tareas para agenda.ME",
+  title: "SellPulse — Gestión de tareas",
+  description: "Plataforma de gestión de tareas para SellPulse",
 };
 
 export default function RootLayout({

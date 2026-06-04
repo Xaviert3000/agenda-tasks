@@ -88,8 +88,7 @@ export default function LoginPage() {
               A
             </div>
             <div>
-              <span className="text-white font-bold text-lg tracking-tight">agenda</span>
-              <span className="text-[#9ACCEC] font-bold text-lg">.ME</span>
+              <span className="text-white font-bold text-lg tracking-tight">SellPulse</span>
             </div>
           </div>
 
@@ -117,7 +116,7 @@ export default function LoginPage() {
           {/* Testimonial */}
           <div className="mt-10 pt-8 border-t border-white/10">
             <blockquote className="text-white/60 text-sm italic leading-relaxed mb-4">
-              "agenda.ME transformó la manera en que trabajamos. Pasamos de emails interminables a tener todo claro en un solo lugar."
+              "SellPulse transformó la manera en que trabajamos. Pasamos de emails interminables a tener todo claro en un solo lugar."
             </blockquote>
             <div className="flex items-center gap-3">
               <img
@@ -142,7 +141,7 @@ export default function LoginPage() {
           <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-base" style={{ background: "#2F3988" }}>
             A
           </div>
-          <span className="font-bold text-xl" style={{ color: "#2F3988" }}>agenda<span className="text-gray-500">.ME</span></span>
+          <span className="font-bold text-xl" style={{ color: "#2F3988" }}>SellPulse</span>
         </div>
 
         <div className="w-full max-w-[400px]">
@@ -299,7 +298,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="mt-12 text-[11px] text-gray-400 text-center">
-          © 2025 agenda.ME · <Link href="#" className="hover:text-gray-600">Privacidad</Link> · <Link href="#" className="hover:text-gray-600">Términos</Link>
+          © 2025 SellPulse · <Link href="#" className="hover:text-gray-600">Privacidad</Link> · <Link href="#" className="hover:text-gray-600">Términos</Link>
         </p>
       </div>
     </div>

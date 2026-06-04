@@ -66,7 +66,7 @@ function EmptyDashboard({ workspace }: { workspace: string }) {
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Tu espacio está vacío</h2>
             <p className="text-sm text-gray-500 max-w-sm leading-relaxed">
-              Aún no tienes proyectos ni tareas. Sigue los pasos a continuación para comenzar a usar agenda.ME.
+              Aún no tienes proyectos ni tareas. Sigue los pasos a continuación para comenzar a usar SellPulse.
             </p>
           </div>
 

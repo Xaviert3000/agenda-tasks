@@ -78,7 +78,7 @@ function RightPanel({ step }: { step: number }) {
             <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-lg font-bold text-white">M</div>
             <div>
               <p className="text-white text-sm font-semibold">Mi Empresa</p>
-              <p className="text-white/50 text-xs">mi-empresa.agenda.me</p>
+              <p className="text-white/50 text-xs">mi-empresa.sellpulse.com</p>
             </div>
           </div>
           <div className="h-px bg-white/10" />
@@ -302,7 +302,7 @@ export default function OnboardingPage() {
             A
           </div>
           <span className="font-bold text-xl tracking-tight" style={{ color: "#2F3988" }}>
-            agenda<span className="text-gray-400">.ME</span>
+            SellPulse
           </span>
         </div>
 
@@ -333,7 +333,7 @@ export default function OnboardingPage() {
                   />
                   {errors.workspace && <p className="mt-1 text-xs text-red-500 font-medium">{errors.workspace}</p>}
                   <p className="mt-1 text-xs text-gray-400">
-                    agenda.me/<span className="font-medium text-gray-600">{slug || "mi-empresa"}</span>
+                    sellpulse.com/<span className="font-medium text-gray-600">{slug || "mi-empresa"}</span>
                   </p>
                 </div>
 
@@ -396,7 +396,7 @@ export default function OnboardingPage() {
                     <span className="font-semibold underline" style={{ color: "#2F3988" }}>Términos de Servicio</span>
                     {" "}y la{" "}
                     <span className="font-semibold underline" style={{ color: "#2F3988" }}>Política de Privacidad</span>
-                    {" "}de agenda.ME.
+                    {" "}de SellPulse.
                   </span>
                 </button>
                 {errors.agreed && <p className="mt-1 text-xs text-red-500 font-medium">{errors.agreed}</p>}
@@ -608,7 +608,7 @@ export default function OnboardingPage() {
         </div>
 
         <p className="mt-10 text-[11px] text-gray-400 text-center">
-          © 2025 agenda.ME
+          © 2025 SellPulse
         </p>
       </div>
 

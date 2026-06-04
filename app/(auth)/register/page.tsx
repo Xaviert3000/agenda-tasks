@@ -177,7 +177,7 @@ export default function RegisterPage() {
             A
           </div>
           <span className="font-bold text-xl tracking-tight" style={{ color: "#2F3988" }}>
-            agenda<span className="text-gray-400">.ME</span>
+            SellPulse
           </span>
         </div>
 
@@ -288,7 +288,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="mt-10 text-[11px] text-gray-400 text-center">
-          © 2025 agenda.ME · <Link href="#" className="hover:text-gray-600">Privacidad</Link> · <Link href="#" className="hover:text-gray-600">Términos</Link>
+          © 2025 SellPulse · <Link href="#" className="hover:text-gray-600">Privacidad</Link> · <Link href="#" className="hover:text-gray-600">Términos</Link>
         </p>
       </div>
 
@@ -319,7 +319,7 @@ export default function RegisterPage() {
               <span style={{ color: "#9ACCEC" }}>crece sin límites.</span>
             </h3>
             <p className="text-white/55 text-sm leading-relaxed">
-              Únete a miles de equipos que ya usan agenda.ME para gestionar sus proyectos con claridad y velocidad.
+              Únete a miles de equipos que ya usan SellPulse para gestionar sus proyectos con claridad y velocidad.
             </p>
           </div>
 
@@ -347,7 +347,7 @@ export default function RegisterPage() {
               <div className="w-8 h-8 rounded-full border-2 border-[#2F3988] bg-[#3d4aa8] flex items-center justify-center text-[10px] font-bold text-white">+2k</div>
             </div>
             <p className="text-xs text-white/50">
-              <span className="text-white font-semibold">+2,000 equipos</span> ya confían en agenda.ME
+              <span className="text-white font-semibold">+2,000 equipos</span> ya confían en SellPulse
             </p>
           </div>
         </div>

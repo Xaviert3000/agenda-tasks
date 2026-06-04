@@ -82,7 +82,7 @@ export default function SettingsPage() {
 
   /* Perfil */
   const [name,      setName]      = useState("Tú");
-  const [email,     setEmail]     = useState("tu@agenda.me");
+  const [email,     setEmail]     = useState("tu@sellpulse.com");
   const [role,      setRole]      = useState("Admin");
   const [bio,       setBio]       = useState("");
   const [saved,     setSaved]     = useState(false);
@@ -104,7 +104,7 @@ export default function SettingsPage() {
   const [density, setDensity] = useState<Density>("default");
 
   /* Workspace */
-  const [wsName, setWsName] = useState("agenda.ME");
+  const [wsName, setWsName] = useState("SellPulse");
   const [wsDesc, setWsDesc] = useState("Plan Pro · Workspace de equipo");
 
   /* Miembros: invite */
@@ -656,7 +656,7 @@ export default function SettingsPage() {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Canales de envío</p>
         </div>
         {[
-          { icon: Bell,  label: "Notificaciones en la app", desc: "Recibirlas dentro de agenda.ME", checked: true, setChecked: () => {} },
+          { icon: Bell,  label: "Notificaciones en la app", desc: "Recibirlas dentro de SellPulse", checked: true, setChecked: () => {} },
           { icon: Mail,  label: "Correo electrónico",       desc: "Resumen de notificaciones por email", checked: emailNoti, setChecked: () => setEmailNoti(!emailNoti) },
           { icon: Smartphone, label: "Push / Móvil",        desc: "Notificaciones en tu dispositivo móvil", checked: pushNoti, setChecked: () => setPushNoti(!pushNoti) },
         ].map((c, i) => (
@@ -806,8 +806,8 @@ export default function SettingsPage() {
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1.5">URL del workspace</label>
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-[#2F3988] focus-within:ring-1 focus-within:ring-[#2F3988]/20 transition">
-            <span className="px-3 py-2 bg-gray-50 text-xs text-gray-400 border-r border-gray-200">agenda.me/</span>
-            <input defaultValue="agenda-me" className="flex-1 px-3 py-2 text-sm text-gray-800 focus:outline-none" />
+            <span className="px-3 py-2 bg-gray-50 text-xs text-gray-400 border-r border-gray-200">sellpulse.com/</span>
+            <input defaultValue="sellpulse" className="flex-1 px-3 py-2 text-sm text-gray-800 focus:outline-none" />
           </div>
         </div>
         <div>
@@ -877,9 +877,17 @@ export default function SettingsPage() {
               const { data: { user } } = await supabase.auth.getUser();
               if (!user) return;
               const roleDbMap: Record<string, "owner" | "admin" | "member"> = { Miembro: "member", Moderador: "member", Admin: "admin" };
-              await supabase
-                .from("workspace_invitations")
-                .upsert({ workspace_id: workspaceId, email: inviteEmail, role: roleDbMap[inviteRole] ?? "member", invited_by: user.id, sent_at: new Date().toISOString() }, { onConflict: "workspace_id,email" });
+              await fetch("/api/workspace/invite", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  workspaceId,
+                  workspaceSlug: workspace,
+                  email: inviteEmail,
+                  role: roleDbMap[inviteRole] ?? "member",
+                  invitedBy: user.id,
+                }),
+              });
               setInviteSent(true);
               setInviteEmail("");
               setTimeout(() => setInviteSent(false), 3000);
@@ -941,12 +949,11 @@ export default function SettingsPage() {
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 mr-2">Pendiente</span>
                 <button
                   onClick={async () => {
-                    if (!workspaceId) return;
-                    const supabase = createClient();
-                    await supabase
-                      .from("workspace_invitations")
-                      .update({ sent_at: new Date().toISOString() })
-                      .eq("id", inv.id);
+                    await fetch("/api/workspace/invite", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ inviteId: inv.id, workspaceSlug: workspace }),
+                    });
                     setResentEmail(inv.email);
                     setTimeout(() => setResentEmail(null), 2500);
                   }}
@@ -1149,7 +1156,7 @@ export default function SettingsPage() {
   const handleConnectZapierMake = async (key: string) => {
     await saveIntegration(key, {
       connected: true,
-      meta: { webhook: `https://agenda.me/api/webhooks/${workspace}/${key}` },
+      meta: { webhook: `https://sellpulse.com/api/webhooks/${workspace}/${key}` },
     });
     setIntModal(null);
   };
@@ -1197,7 +1204,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h3 className="text-base font-semibold text-gray-900 mb-1">Integraciones</h3>
-        <p className="text-sm text-gray-500">Conecta agenda.ME con tus herramientas favoritas.</p>
+        <p className="text-sm text-gray-500">Conecta SellPulse con tus herramientas favoritas.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -1341,10 +1348,10 @@ export default function SettingsPage() {
                 </p>
                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 mb-4">
                   <code className="text-xs text-gray-700 flex-1 truncate font-mono">
-                    https://agenda.me/api/webhooks/{workspace}/zapier
+                    https://sellpulse.com/api/webhooks/{workspace}/zapier
                   </code>
                   <button
-                    onClick={() => navigator.clipboard.writeText(`https://agenda.me/api/webhooks/${workspace}/zapier`)}
+                    onClick={() => navigator.clipboard.writeText(`https://sellpulse.com/api/webhooks/${workspace}/zapier`)}
                     className="text-xs text-[#2F3988] font-semibold hover:underline flex-shrink-0"
                   >Copiar</button>
                 </div>
@@ -1386,10 +1393,10 @@ export default function SettingsPage() {
                 </p>
                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 mb-4">
                   <code className="text-xs text-gray-700 flex-1 truncate font-mono">
-                    https://agenda.me/api/webhooks/{workspace}/make
+                    https://sellpulse.com/api/webhooks/{workspace}/make
                   </code>
                   <button
-                    onClick={() => navigator.clipboard.writeText(`https://agenda.me/api/webhooks/${workspace}/make`)}
+                    onClick={() => navigator.clipboard.writeText(`https://sellpulse.com/api/webhooks/${workspace}/make`)}
                     className="text-xs text-[#6D0FC8] font-semibold hover:underline flex-shrink-0"
                   >Copiar</button>
                 </div>

@@ -178,7 +178,7 @@ function ResetPasswordForm() {
             A
           </div>
           <span className="font-bold text-xl tracking-tight" style={{ color: "#2F3988" }}>
-            agenda<span className="text-gray-400">.ME</span>
+            SellPulse
           </span>
         </div>
 
@@ -292,7 +292,7 @@ function ResetPasswordForm() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          © 2025 agenda.ME ·{" "}
+          © 2025 SellPulse ·{" "}
           <Link href="#" className="hover:text-gray-600">Privacidad</Link> ·{" "}
           <Link href="#" className="hover:text-gray-600">Términos</Link>
         </p>

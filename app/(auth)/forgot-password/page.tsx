@@ -102,7 +102,7 @@ export default function ForgotPasswordPage() {
               A
             </div>
             <span className="font-bold text-xl tracking-tight text-white">
-              agenda<span className="text-white/50">.ME</span>
+              SellPulse
             </span>
           </div>
           <h2 className="text-3xl font-bold text-white mb-4 leading-tight">
@@ -127,7 +127,7 @@ export default function ForgotPasswordPage() {
             A
           </div>
           <span className="font-bold text-xl tracking-tight" style={{ color: "#2F3988" }}>
-            agenda<span className="text-gray-400">.ME</span>
+            SellPulse
           </span>
         </div>
 
@@ -204,7 +204,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <p className="mt-10 text-[11px] text-gray-400 text-center">
-          © 2025 agenda.ME ·{" "}
+          © 2025 SellPulse ·{" "}
           <Link href="#" className="hover:text-gray-600">Privacidad</Link> ·{" "}
           <Link href="#" className="hover:text-gray-600">Términos</Link>
         </p>
