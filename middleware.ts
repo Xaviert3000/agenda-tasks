@@ -38,8 +38,9 @@ export async function middleware(request: NextRequest) {
 
   const isOnboarding = pathname.startsWith("/onboarding");
   const isInvite     = pathname.startsWith("/invite");
+  const isApi        = pathname.startsWith("/api/");
 
-  if (!user && !isAuthRoute && !isOnboarding && !isInvite) {
+  if (!user && !isAuthRoute && !isOnboarding && !isInvite && !isApi) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
