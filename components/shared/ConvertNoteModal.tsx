@@ -121,7 +121,8 @@ export function ConvertNoteModal({
         .single();
       if (!ws) { setError("Workspace no encontrado"); setSaving(false); return; }
 
-      const { data: user } = await supabase.auth.getUser();
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) { setError("No autenticado"); setSaving(false); return; }
       const { data, error: dbErr } = await supabase
         .from("documents")
         .insert({
@@ -131,7 +132,7 @@ export function ConvertNoteModal({
           icon: "📄",
           folder_id: null,
           tags: [],
-          created_by: user.user?.id,
+          created_by: authUser.id,
         })
         .select("id")
         .single();
