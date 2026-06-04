@@ -524,6 +524,29 @@ export type Database = {
         };
         Relationships: [];
       };
+      workspace_invitations: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          email: string;
+          role: Database["public"]["Enums"]["workspace_role"];
+          invited_by: string;
+          sent_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          email: string;
+          role?: Database["public"]["Enums"]["workspace_role"];
+          invited_by: string;
+          sent_at?: string;
+        };
+        Update: {
+          role?: Database["public"]["Enums"]["workspace_role"];
+          sent_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
