@@ -11,6 +11,7 @@ import {
   CheckSquare,
   FileOutput,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/lib/supabase/types";
@@ -244,10 +245,19 @@ export function NotepadPanel({ workspace, onClose }: NotepadPanelProps) {
                 </p>
               ) : (
                 filteredNotes.map((note) => (
-                  <button key={note.id} onClick={() => setActiveNoteId(note.id)} className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors">
-                    <p className="font-semibold text-sm text-gray-800 truncate">{note.title}</p>
-                    <p className="text-xs text-gray-400 truncate mt-0.5">{notePreview(note.body)}</p>
-                  </button>
+                  <div key={note.id} className="flex items-center group hover:bg-gray-50 transition-colors">
+                    <button onClick={() => setActiveNoteId(note.id)} className="flex-1 text-left px-4 py-3 min-w-0">
+                      <p className="font-semibold text-sm text-gray-800 truncate">{note.title}</p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{notePreview(note.body)}</p>
+                    </button>
+                    <button
+                      onClick={() => deleteNote(note.id)}
+                      title="Eliminar nota"
+                      className="opacity-0 group-hover:opacity-100 w-7 h-7 mr-3 flex-shrink-0 flex items-center justify-center rounded-md hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
