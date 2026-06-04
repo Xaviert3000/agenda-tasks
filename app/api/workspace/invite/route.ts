@@ -60,6 +60,36 @@ function buildEmailHtml(opts: {
 </html>`;
 }
 
+// GET /api/workspace/invite?id=xxx — fetch invite details publicly (uses service role)
+export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  const supabase = createServiceClient();
+
+  const { data: inv } = await supabase
+    .from("workspace_invitations")
+    .select("id, email, role, workspace_id, invited_by")
+    .eq("id", id)
+    .single();
+
+  if (!inv) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const [{ data: ws }, { data: profile }] = await Promise.all([
+    supabase.from("workspaces").select("name").eq("id", inv.workspace_id).single(),
+    supabase.from("profiles").select("name").eq("id", inv.invited_by).single(),
+  ]);
+
+  return NextResponse.json({
+    id: inv.id,
+    email: inv.email,
+    role: inv.role,
+    workspace_id: inv.workspace_id,
+    workspaceName: ws?.name ?? "el workspace",
+    inviterName: profile?.name ?? "Un miembro del equipo",
+  });
+}
+
 // POST /api/workspace/invite — create invitation + send email
 export async function POST(req: NextRequest) {
   try {

@@ -42,43 +42,16 @@ export default function InvitePage() {
   /* ── 1. Load invite details ── */
   useEffect(() => {
     (async () => {
-      const supabase = createClient();
+      // Use API route (service role) so RLS doesn't block unauthenticated reads
+      const res = await fetch(`/api/workspace/invite?id=${inviteId}`);
+      if (!res.ok) { setMode("invalid"); return; }
 
-      // Fetch invite
-      const { data: inv } = await supabase
-        .from("workspace_invitations")
-        .select("id, email, role, workspace_id, invited_by")
-        .eq("id", inviteId)
-        .single();
-
-      if (!inv) { setMode("invalid"); return; }
-
-      // Fetch workspace name
-      const { data: ws } = await supabase
-        .from("workspaces")
-        .select("name")
-        .eq("id", inv.workspace_id)
-        .single();
-
-      // Fetch inviter name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("name")
-        .eq("id", inv.invited_by)
-        .single();
-
-      const info: InviteInfo = {
-        id: inv.id,
-        email: inv.email,
-        role: inv.role,
-        workspace_id: inv.workspace_id,
-        workspaceName: ws?.name ?? "el workspace",
-        inviterName: profile?.name ?? "Un miembro del equipo",
-      };
-      setInvite(info);
+      const inv: InviteInfo = await res.json();
+      setInvite(inv);
       setEmail(inv.email);
 
       // Check if user is already logged in
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         // Check if already a member
