@@ -1,32 +1,115 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Plus, Search, X } from "lucide-react";
-import { WORKSPACE_MEMBERS } from "@/lib/data/mockData";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-const LAST_MESSAGES: Record<string, { text: string; time: string; unread?: number }> = {
-  michael: { text: "¿Puedes revisar el PR que subí ayer?", time: "10:48", unread: 2 },
-  sofia:   { text: "El jueves a más tardar. ¿Puedes coordinar?", time: "09:07" },
-  daniel:  { text: "Ya lo abrí, issue #47.", time: "13:27", unread: 1 },
-  emma:    { text: "¡Gracias! Eres lo mejor 🙌", time: "10:21" },
-};
+interface Member {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  is_online: boolean;
+}
+
+interface LastMessage {
+  text: string;
+  time: string;
+  unread: number;
+}
 
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const workspace    = params.workspace  as string;
   const activeMember = params.memberId   as string | undefined;
 
-  const [search,      setSearch]      = useState("");
-  const [compose,     setCompose]     = useState(false);
+  const [search,        setSearch]        = useState("");
+  const [compose,       setCompose]       = useState(false);
   const [composeSearch, setComposeSearch] = useState("");
 
-  const filtered = WORKSPACE_MEMBERS.filter((m) =>
+  const [members,      setMembers]      = useState<Member[]>([]);
+  const [lastMessages, setLastMessages] = useState<Record<string, LastMessage>>({});
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [loading,      setLoading]      = useState(true);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setCurrentUserId(user.id);
+
+      const { data: ws } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("slug", workspace)
+        .single();
+      if (!ws) return;
+
+      // Fetch all workspace members except current user
+      const { data: wm } = await supabase
+        .from("workspace_members")
+        .select("user_id, profiles(id, name, avatar_url, is_online)")
+        .eq("workspace_id", ws.id)
+        .neq("user_id", user.id);
+
+      if (!wm) return;
+
+      const memberList: Member[] = wm
+        .map((row: any) => row.profiles)
+        .filter(Boolean)
+        .map((p: any) => ({ id: p.id, name: p.name, avatar_url: p.avatar_url, is_online: p.is_online }));
+
+      setMembers(memberList);
+
+      // Fetch last message + unread count per conversation
+      const msgs: Record<string, LastMessage> = {};
+      await Promise.all(
+        memberList.map(async (m) => {
+          const { data: last } = await supabase
+            .from("messages")
+            .select("content, created_at, read_at, sender_id")
+            .eq("workspace_id", ws.id)
+            .or(
+              `and(sender_id.eq.${user.id},recipient_id.eq.${m.id}),and(sender_id.eq.${m.id},recipient_id.eq.${user.id})`
+            )
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!last) return;
+
+          const { count: unread } = await supabase
+            .from("messages")
+            .select("id", { count: "exact", head: true })
+            .eq("sender_id", m.id)
+            .eq("recipient_id", user.id)
+            .is("read_at", null);
+
+          const d = new Date(last.created_at);
+          const time = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+
+          msgs[m.id] = { text: last.content, time, unread: unread ?? 0 };
+        })
+      );
+
+      setLastMessages(msgs);
+      setLoading(false);
+    }
+
+    load();
+  }, [workspace]);
+
+  const avatarUrl = (m: Member) =>
+    m.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${m.id}`;
+
+  const filtered = members.filter((m) =>
     m.name.toLowerCase().includes(search.toLowerCase())
   );
-  const composeFiltered = WORKSPACE_MEMBERS.filter((m) =>
+  const composeFiltered = members.filter((m) =>
     m.name.toLowerCase().includes(composeSearch.toLowerCase())
   );
 
@@ -62,11 +145,25 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
 
         {/* Conversations */}
         <div className="flex-1 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center mt-6 px-4">Sin resultados</p>
+          {loading ? (
+            <div className="space-y-0">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 animate-pulse">
+                  <div className="w-10 h-10 rounded-full bg-gray-200 flex-shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 bg-gray-200 rounded w-2/3" />
+                    <div className="h-2.5 bg-gray-100 rounded w-4/5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center mt-6 px-4">
+              {members.length === 0 ? "Sin miembros aún" : "Sin resultados"}
+            </p>
           ) : (
             filtered.map((member) => {
-              const lastMsg  = LAST_MESSAGES[member.id];
+              const lastMsg  = lastMessages[member.id];
               const isActive = activeMember === member.id;
               return (
                 <Link
@@ -79,14 +176,14 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
                 >
                   <div className="relative flex-shrink-0">
                     <img
-                      src={member.avatar}
+                      src={avatarUrl(member)}
                       alt={member.name}
                       className="w-10 h-10 rounded-full"
                     />
                     <span
                       className={cn(
                         "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white",
-                        member.isOnline ? "bg-green-500" : "bg-gray-300"
+                        member.is_online ? "bg-green-500" : "bg-gray-300"
                       )}
                     />
                   </div>
@@ -95,7 +192,11 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
                       <span
                         className={cn(
                           "text-sm truncate",
-                          isActive ? "font-semibold text-[#2F3988]" : lastMsg?.unread ? "font-semibold text-gray-900" : "font-medium text-gray-800"
+                          isActive
+                            ? "font-semibold text-[#2F3988]"
+                            : lastMsg?.unread
+                            ? "font-semibold text-gray-900"
+                            : "font-medium text-gray-800"
                         )}
                       >
                         {member.name}
@@ -104,7 +205,7 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
                         <span className="text-[10px] text-gray-400 flex-shrink-0">{lastMsg.time}</span>
                       )}
                     </div>
-                    {lastMsg && (
+                    {lastMsg ? (
                       <p
                         className={cn(
                           "text-xs truncate mt-0.5",
@@ -113,6 +214,8 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
                       >
                         {lastMsg.text}
                       </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-0.5 italic">Sin mensajes aún</p>
                     )}
                   </div>
                   {lastMsg?.unread ? (
@@ -173,7 +276,9 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
             {/* Member list */}
             <div className="overflow-y-auto flex-1 py-1">
               {composeFiltered.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-6">Sin resultados</p>
+                <p className="text-xs text-gray-400 text-center py-6">
+                  {members.length === 0 ? "Sin miembros en este workspace" : "Sin resultados"}
+                </p>
               ) : (
                 composeFiltered.map((member) => (
                   <Link
@@ -184,21 +289,21 @@ export default function MessagesLayout({ children }: { children: React.ReactNode
                   >
                     <div className="relative flex-shrink-0">
                       <img
-                        src={member.avatar}
+                        src={avatarUrl(member)}
                         alt={member.name}
                         className="w-11 h-11 rounded-full"
                       />
                       <span
                         className={cn(
                           "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white",
-                          member.isOnline ? "bg-green-500" : "bg-gray-300"
+                          member.is_online ? "bg-green-500" : "bg-gray-300"
                         )}
                       />
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">{member.name}</p>
-                      <p className={cn("text-xs mt-0.5", member.isOnline ? "text-green-500" : "text-gray-400")}>
-                        {member.isOnline ? "● En línea" : "● Desconectado"}
+                      <p className={cn("text-xs mt-0.5", member.is_online ? "text-green-500" : "text-gray-400")}>
+                        {member.is_online ? "● En línea" : "● Desconectado"}
                       </p>
                     </div>
                   </Link>
