@@ -309,7 +309,7 @@ export default function SettingsPage() {
     if (user) {
       await supabase
         .from("profiles")
-        .update({ name, updated_at: new Date().toISOString() } as Record<string, unknown>)
+        .update({ name, updated_at: new Date().toISOString() })
         .eq("id", user.id);
     }
     // Save appearance
