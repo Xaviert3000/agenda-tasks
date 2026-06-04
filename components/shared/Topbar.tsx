@@ -174,7 +174,7 @@ export function Topbar({ workspace, breadcrumbs = [] }: TopbarProps) {
 
       {/* Notepad panel */}
       {showNotepad && (
-        <NotepadPanel onClose={() => setShowNotepad(false)} />
+        <NotepadPanel workspace={workspace} onClose={() => setShowNotepad(false)} />
       )}
     </>
   );
