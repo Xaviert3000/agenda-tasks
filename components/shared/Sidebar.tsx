@@ -6,7 +6,7 @@ import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import {
   ChevronDown, ChevronRight, Plus, X, Check,
   PanelLeftClose, PanelLeft, Settings, Inbox,
-  LayoutDashboard, Folder, FileText, BookOpen, Lock, Globe,
+  LayoutDashboard, Folder, FileText, BookOpen, Lock, Globe, LogOut,
 } from "lucide-react";
 import { useProjectSettingsStore } from "@/lib/store/projectSettingsStore";
 import { createClient } from "@/lib/supabase/client";
@@ -880,6 +880,17 @@ export function Sidebar({ workspace }: SidebarProps) {
         <Link href={`/${workspace}/settings`}>
           <Settings className="w-4 h-4 text-gray-400 hover:text-gray-600" />
         </Link>
+        <button
+          onClick={async () => {
+            const supabase = createClient();
+            await supabase.auth.signOut();
+            window.location.href = "/login";
+          }}
+          title="Cerrar sesión"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   );
