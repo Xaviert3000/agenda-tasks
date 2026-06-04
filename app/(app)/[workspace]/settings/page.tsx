@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { applyTheme, applyDensity, saveAppearance, type Theme, type Density } from "@/components/shared/AppearanceProvider";
@@ -81,11 +81,14 @@ export default function SettingsPage() {
   const [active, setActive] = useState(() => searchParams.get("tab") ?? "perfil");
 
   /* Perfil */
-  const [name,  setName]  = useState("Tú");
-  const [email, setEmail] = useState("tu@agenda.me");
-  const [role,  setRole]  = useState("Admin");
-  const [bio,   setBio]   = useState("");
-  const [saved, setSaved] = useState(false);
+  const [name,      setName]      = useState("Tú");
+  const [email,     setEmail]     = useState("tu@agenda.me");
+  const [role,      setRole]      = useState("Admin");
+  const [bio,       setBio]       = useState("");
+  const [saved,     setSaved]     = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* Notificaciones */
   const [notiEnabled, setNotiEnabled] = useState<Record<string, boolean>>({
@@ -175,10 +178,12 @@ export default function SettingsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("name, avatar_url")
+        .select("name, avatar_url, bio")
         .eq("id", user.id)
         .single();
-      if (profile?.name) setName(profile.name);
+      if (profile?.name)       setName(profile.name);
+      if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
+      if ((profile as { bio?: string } | null)?.bio) setBio((profile as { bio?: string }).bio ?? "");
 
       // Load workspace id + members
       const { data: ws } = await supabase
@@ -271,13 +276,41 @@ export default function SettingsPage() {
     })();
   }, [workspace]);
 
+  const handleAvatarChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert("La imagen no puede superar 2 MB"); return; }
+
+    setAvatarUploading(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setAvatarUploading(false); return; }
+
+    const ext  = file.name.split(".").pop();
+    const path = `${user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) { console.error(uploadError); setAvatarUploading(false); return; }
+
+    const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+
+    await supabase.from("profiles").update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", user.id);
+    setAvatarUrl(publicUrl);
+    setAvatarUploading(false);
+    // reset input so same file can be re-selected
+    e.target.value = "";
+  }, []);
+
   const handleSave = async () => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase
         .from("profiles")
-        .update({ name, updated_at: new Date().toISOString() })
+        .update({ name, updated_at: new Date().toISOString() } as Record<string, unknown>)
         .eq("id", user.id);
     }
     // Save appearance
@@ -316,19 +349,38 @@ export default function SettingsPage() {
       <div className="flex items-center gap-5">
         <div className="relative">
           <img
-            src="https://api.dicebear.com/7.x/avataaars/svg?seed=me&backgroundColor=b6e3f4"
+            src={avatarUrl ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=b6e3f4`}
             alt="Avatar"
-            className="w-20 h-20 rounded-full border-2 border-gray-200"
+            className="w-20 h-20 rounded-full border-2 border-gray-200 object-cover"
           />
-          <button className="absolute bottom-0 right-0 w-7 h-7 bg-[#2F3988] rounded-full flex items-center justify-center border-2 border-white hover:bg-[#3d4aa8] transition-colors">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={avatarUploading}
+            className="absolute bottom-0 right-0 w-7 h-7 bg-[#2F3988] rounded-full flex items-center justify-center border-2 border-white hover:bg-[#3d4aa8] transition-colors disabled:opacity-60"
+          >
             <Camera className="w-3.5 h-3.5 text-white" />
           </button>
         </div>
         <div>
           <p className="text-sm font-medium text-gray-700">Foto de perfil</p>
           <p className="text-xs text-gray-400 mt-0.5">JPG, PNG o GIF · Máx. 2 MB</p>
-          <button className="mt-2 text-xs text-[#2F3988] hover:underline font-medium">Cambiar foto</button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={avatarUploading}
+            className="mt-2 text-xs text-[#2F3988] hover:underline font-medium disabled:opacity-60"
+          >
+            {avatarUploading ? "Subiendo…" : "Cambiar foto"}
+          </button>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="hidden"
+          onChange={handleAvatarChange}
+        />
       </div>
 
       {/* Fields */}
