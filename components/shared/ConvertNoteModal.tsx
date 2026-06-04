@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, CheckSquare, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { createTask } from "@/app/actions/tasks";
+import { createTask, updateTaskField } from "@/app/actions/tasks";
 import { cn } from "@/lib/utils";
 
 interface ConvertNoteModalProps {
@@ -109,6 +109,9 @@ export function ConvertNoteModal({
         setError((result as any)?.error ?? "Error al crear la tarea");
         setSaving(false);
         return;
+      }
+      if (noteBody.trim()) {
+        await updateTaskField(result.id, { description: noteBody.trim() });
       }
       onSuccess?.(result.id);
       onClose();
